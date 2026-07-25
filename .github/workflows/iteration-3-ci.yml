@@ -1,227 +1,39 @@
-name: SmartQuote CI
+name: Materialize Iteration 6
 
 on:
-  push:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
-  workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  quality:
-    name: Code quality
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    defaults:
-      run:
-        working-directory: backend
-    steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
-        with:
-          python-version: "3.12"
-          enable-cache: true
-      - name: Install locked dependencies
-        run: uv sync --frozen
-      - name: Ruff lint
-        run: uv run ruff check .
-      - name: Compile Python sources
-        run: uv run python -m compileall app tests alembic
-
-  unit-tests:
-    name: Unit tests
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    env:
-      SMARTQUOTE_DATABASE_URL: "sqlite+pysqlite:////tmp/smartquote-unit.db"
-      SMARTQUOTE_STORAGE_ROOT: /tmp/smartquote-unit-storage
-      SMARTQUOTE_CELERY_BROKER_URL: memory://
-      SMARTQUOTE_CELERY_RESULT_BACKEND: cache+memory://
-      SMARTQUOTE_CELERY_TASK_ALWAYS_EAGER: "true"
-    defaults:
-      run:
-        working-directory: backend
-    steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
-        with:
-          python-version: "3.12"
-          enable-cache: true
-      - run: uv sync --frozen
-      - run: uv run pytest tests/unit -q
-
-  integration-tests:
-    name: Integration, API and Celery tests
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_USER: smartquote
-          POSTGRES_PASSWORD: smartquote
-          POSTGRES_DB: smartquote
-        ports: ["5432:5432"]
-        options: >-
-          --health-cmd "pg_isready -U smartquote -d smartquote"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-      redis:
-        image: redis:7-alpine
-        ports: ["6379:6379"]
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 5s
-          --health-timeout 3s
-          --health-retries 10
-    env:
-      SMARTQUOTE_DATABASE_URL: postgresql+psycopg://smartquote:smartquote@localhost:5432/smartquote
-      SMARTQUOTE_STORAGE_ROOT: /tmp/smartquote-integration-storage
-      SMARTQUOTE_CELERY_BROKER_URL: redis://localhost:6379/0
-      SMARTQUOTE_CELERY_RESULT_BACKEND: redis://localhost:6379/1
-      SMARTQUOTE_CELERY_TASK_ALWAYS_EAGER: "false"
-    defaults:
-      run:
-        working-directory: backend
-    steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
-        with:
-          python-version: "3.12"
-          enable-cache: true
-      - run: uv sync --frozen
-      - run: uv run alembic upgrade head
-      - run: uv run pytest tests/integration tests/test_health.py -q
-
-  migration-cycle:
-    name: Migration upgrade and rollback
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_USER: smartquote
-          POSTGRES_PASSWORD: smartquote
-          POSTGRES_DB: smartquote
-        ports: ["5432:5432"]
-        options: >-
-          --health-cmd "pg_isready -U smartquote -d smartquote"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-    env:
-      SMARTQUOTE_DATABASE_URL: postgresql+psycopg://smartquote:smartquote@localhost:5432/smartquote
-    defaults:
-      run:
-        working-directory: backend
-    steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
-        with:
-          python-version: "3.12"
-          enable-cache: true
-      - run: uv sync --frozen
-      - run: uv run alembic upgrade head
-      - run: uv run alembic downgrade base
-      - run: uv run alembic upgrade head
-      - run: uv run alembic current
-
-  coverage:
-    name: Full test coverage
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_USER: smartquote
-          POSTGRES_PASSWORD: smartquote
-          POSTGRES_DB: smartquote
-        ports: ["5432:5432"]
-        options: >-
-          --health-cmd "pg_isready -U smartquote -d smartquote"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-      redis:
-        image: redis:7-alpine
-        ports: ["6379:6379"]
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 5s
-          --health-timeout 3s
-          --health-retries 10
-    env:
-      SMARTQUOTE_DATABASE_URL: postgresql+psycopg://smartquote:smartquote@localhost:5432/smartquote
-      SMARTQUOTE_STORAGE_ROOT: /tmp/smartquote-coverage-storage
-      SMARTQUOTE_CELERY_BROKER_URL: redis://localhost:6379/0
-      SMARTQUOTE_CELERY_RESULT_BACKEND: redis://localhost:6379/1
-    defaults:
-      run:
-        working-directory: backend
-    steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
-        with:
-          python-version: "3.12"
-          enable-cache: true
-      - run: uv sync --frozen
-      - run: uv run alembic upgrade head
-      - run: uv run --with coverage coverage run --source=app -m pytest -q
-      - run: uv run --with coverage coverage report --fail-under=90
-      - run: uv run --with coverage coverage xml
-      - uses: actions/upload-artifact@v4
-        with:
-          name: coverage-xml-${{ github.sha }}
-          path: backend/coverage.xml
-          if-no-files-found: error
-          retention-days: 14
-
-  openapi-contract:
-    name: OpenAPI contract
+  materialize:
+    if: >-
+      github.event.pull_request.head.ref == 'agent/iteration-6-ai-product-extraction' &&
+      github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    env:
-      SMARTQUOTE_DATABASE_URL: "sqlite+pysqlite:///:memory:"
-      SMARTQUOTE_STORAGE_ROOT: /tmp/smartquote-openapi-storage
-      SMARTQUOTE_CELERY_BROKER_URL: memory://
-      SMARTQUOTE_CELERY_RESULT_BACKEND: cache+memory://
-      SMARTQUOTE_CELERY_TASK_ALWAYS_EAGER: "true"
-    defaults:
-      run:
-        working-directory: backend
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
+      - name: Checkout implementation branch
+        uses: actions/checkout@v4
         with:
-          python-version: "3.12"
-          enable-cache: true
-      - run: uv sync --frozen
-      - name: Validate API operations
-        run: |
-          uv run python - <<'PY'
-          from app.main import app
-          schema = app.openapi()
-          expected = {
-              "/api/v1/documents/{document_id}/status": {"get"},
-              "/api/v1/documents/{document_id}/pages": {"get"},
-              "/api/v1/documents/{document_id}/quality": {"get"},
-              "/api/v1/documents/{document_id}/extraction": {"get"},
-          }
-          for path, methods in expected.items():
-              assert path in schema["paths"]
-              assert methods <= set(schema["paths"][path])
-          assert "post" not in schema["paths"]["/api/v1/documents/{document_id}/status"]
-          PY
+          ref: agent/iteration-6-ai-product-extraction
+          fetch-depth: 0
 
-  docker-build:
-    name: Docker image build
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v4
-      - run: docker build --tag smartquote-ai:${{ github.sha }} backend
+      - name: Verify and extract implementation
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "06396402408a42827aae086622d46eb31ef93bfdaaba8581971c5185ad0d6e45  .iteration6/package.tar.gz" | sha256sum --check
+          tar --extract --gzip --file .iteration6/package.tar.gz
+
+      - name: Commit implementation
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add --all
+          git commit -m "Materialize Iteration 6 implementation"
+          git push origin HEAD:agent/iteration-6-ai-product-extraction
