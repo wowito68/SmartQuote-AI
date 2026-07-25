@@ -10,9 +10,12 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.config.settings import get_settings
 
-TEST_DB_PATH = Path("/tmp/smartquote_iteration3_test.db")
-TEST_DATABASE_URL = f"sqlite+pysqlite:///{TEST_DB_PATH}"
-os.environ["SMARTQUOTE_DATABASE_URL"] = TEST_DATABASE_URL
+SQLITE_DB_PATH = Path("/tmp/smartquote_iteration3_test.db")
+DEFAULT_TEST_DATABASE_URL = f"sqlite+pysqlite:///{SQLITE_DB_PATH}"
+TEST_DATABASE_URL = os.environ.get("SMARTQUOTE_DATABASE_URL", DEFAULT_TEST_DATABASE_URL)
+USING_SQLITE = TEST_DATABASE_URL.startswith("sqlite")
+
+os.environ.setdefault("SMARTQUOTE_DATABASE_URL", TEST_DATABASE_URL)
 os.environ["SMARTQUOTE_ENVIRONMENT"] = "test"
 get_settings.cache_clear()
 
@@ -31,16 +34,23 @@ def alembic_config(database_url: str) -> Config:
 
 @pytest.fixture(scope="session", autouse=True)
 def migrated_database(alembic_config: Config) -> Generator[None]:
-    TEST_DB_PATH.unlink(missing_ok=True)
+    if USING_SQLITE:
+        SQLITE_DB_PATH.unlink(missing_ok=True)
+
     command.upgrade(alembic_config, "head")
     yield
     command.downgrade(alembic_config, "base")
-    TEST_DB_PATH.unlink(missing_ok=True)
+
+    if USING_SQLITE:
+        SQLITE_DB_PATH.unlink(missing_ok=True)
 
 
 @pytest.fixture()
 def db_engine(database_url: str, migrated_database: None) -> Generator[Engine]:
-    engine = create_engine(database_url, connect_args={"check_same_thread": False})
+    engine_options = (
+        {"connect_args": {"check_same_thread": False}} if USING_SQLITE else {"pool_pre_ping": True}
+    )
+    engine = create_engine(database_url, **engine_options)
     yield engine
     engine.dispose()
 
