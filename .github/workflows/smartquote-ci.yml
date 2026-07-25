@@ -43,6 +43,9 @@ jobs:
     name: Unit tests
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    env:
+      SMARTQUOTE_DATABASE_URL: sqlite+pysqlite:///:memory:
+      SMARTQUOTE_STORAGE_ROOT: /tmp/smartquote-unit-storage
     defaults:
       run:
         working-directory: backend
@@ -82,6 +85,7 @@ jobs:
           --health-retries 5
     env:
       SMARTQUOTE_DATABASE_URL: postgresql+psycopg://smartquote:smartquote@localhost:5432/smartquote
+      SMARTQUOTE_STORAGE_ROOT: /tmp/smartquote-integration-storage
     defaults:
       run:
         working-directory: backend
@@ -172,6 +176,7 @@ jobs:
           --health-retries 5
     env:
       SMARTQUOTE_DATABASE_URL: postgresql+psycopg://smartquote:smartquote@localhost:5432/smartquote
+      SMARTQUOTE_STORAGE_ROOT: /tmp/smartquote-coverage-storage
     defaults:
       run:
         working-directory: backend
@@ -214,6 +219,7 @@ jobs:
     timeout-minutes: 10
     env:
       SMARTQUOTE_DATABASE_URL: sqlite+pysqlite:///:memory:
+      SMARTQUOTE_STORAGE_ROOT: /tmp/smartquote-openapi-storage
     defaults:
       run:
         working-directory: backend
@@ -239,6 +245,9 @@ jobs:
           expected_operations = {
               "/api/v1/tenders": {"get", "post"},
               "/api/v1/tenders/{tender_id}": {"get", "put", "delete"},
+              "/api/v1/tenders/{tender_id}/documents": {"get", "post"},
+              "/api/v1/documents/{document_id}": {"get", "delete"},
+              "/api/v1/documents/{document_id}/download": {"get"},
           }
 
           assert schema["info"]["title"] == "SmartQuote AI"
@@ -247,6 +256,9 @@ jobs:
               available = set(schema["paths"][path])
               missing = methods - available
               assert not missing, f"Missing methods for {path}: {sorted(missing)}"
+
+          upload = schema["paths"]["/api/v1/tenders/{tender_id}/documents"]["post"]
+          assert "multipart/form-data" in upload["requestBody"]["content"]
           PY
 
   docker-build:

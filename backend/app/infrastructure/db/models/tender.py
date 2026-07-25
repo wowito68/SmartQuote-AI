@@ -29,14 +29,8 @@ class TenderModel(Base):
     __tablename__ = "tenders"
     __table_args__ = (
         CheckConstraint(
-            "status IN ("
-            "'draft', "
-            "'documents_pending', "
-            "'documents_processing', "
-            "'catalog_review', "
-            "'cancelled', "
-            "'closed'"
-            ")",
+            "status IN ('draft', 'documents_pending', 'documents_processing', "
+            "'catalog_review', 'cancelled', 'closed')",
             name="valid_tender_status",
         ),
         Index("ix_tenders_created_by_user_id", "created_by_user_id"),
@@ -49,20 +43,13 @@ class TenderModel(Base):
     status: Mapped[str] = mapped_column(String(50), nullable=False)
     deadline: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_by_user_id: Mapped[UUID] = mapped_column(
-        Uuid,
-        ForeignKey("users.id", ondelete="RESTRICT"),
-        nullable=False,
+        Uuid, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
     )
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        nullable=False,
-        server_default=func.now(),
+        DateTime(timezone=True), nullable=False, server_default=func.now()
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        nullable=False,
-        server_default=func.now(),
-        onupdate=func.now(),
+        DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
     )
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
@@ -79,31 +66,19 @@ class TenderDocumentModel(Base):
     __table_args__ = (
         CheckConstraint("file_size > 0", name="positive_file_size"),
         CheckConstraint(
-            "processing_status IN ("
-            "'uploaded', "
-            "'validating', "
-            "'valid', "
-            "'stored', "
-            "'extracting_text', "
-            "'text_extracted', "
-            "'needs_ocr', "
-            "'processed', "
-            "'rejected', "
-            "'failed'"
-            ")",
+            "processing_status IN ('uploaded', 'deleted', 'rejected')",
             name="valid_document_status",
         ),
         UniqueConstraint("tender_id", "file_hash", name="uq_tender_documents_tender_file_hash"),
         Index("ix_tender_documents_tender_id", "tender_id"),
         Index("ix_tender_documents_uploaded_by_user_id", "uploaded_by_user_id"),
         Index("ix_tender_documents_file_hash", "file_hash"),
+        Index("ix_tender_documents_deleted_at", "deleted_at"),
     )
 
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True)
     tender_id: Mapped[UUID] = mapped_column(
-        Uuid,
-        ForeignKey("tenders.id", ondelete="CASCADE"),
-        nullable=False,
+        Uuid, ForeignKey("tenders.id", ondelete="CASCADE"), nullable=False
     )
     file_name: Mapped[str] = mapped_column(String(255), nullable=False)
     file_path: Mapped[str] = mapped_column(String(1024), nullable=False)
@@ -114,21 +89,15 @@ class TenderDocumentModel(Base):
     processing_status: Mapped[str] = mapped_column(String(50), nullable=False)
     requires_ocr: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     uploaded_by_user_id: Mapped[UUID] = mapped_column(
-        Uuid,
-        ForeignKey("users.id", ondelete="RESTRICT"),
-        nullable=False,
+        Uuid, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
     )
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        nullable=False,
-        server_default=func.now(),
+        DateTime(timezone=True), nullable=False, server_default=func.now()
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        nullable=False,
-        server_default=func.now(),
-        onupdate=func.now(),
+        DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
     )
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     tender: Mapped[TenderModel] = relationship(back_populates="documents")
     uploaded_by: Mapped[UserModel] = relationship(back_populates="uploaded_documents")

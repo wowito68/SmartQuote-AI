@@ -1,5 +1,7 @@
 from enum import StrEnum
 
+from app.domain.documents.value_objects import DocumentStatus
+
 
 class TenderStatus(StrEnum):
     DRAFT = "draft"
@@ -10,15 +12,4 @@ class TenderStatus(StrEnum):
     CLOSED = "closed"
 
 
-class DocumentStatus(StrEnum):
-    UPLOADED = "uploaded"
-    VALIDATING = "validating"
-    VALID = "valid"
-    STORED = "stored"
-    EXTRACTING_TEXT = "extracting_text"
-    TEXT_EXTRACTED = "text_extracted"
-    NEEDS_OCR = "needs_ocr"
-    PROCESSED = "processed"
-    REJECTED = "rejected"
-    FAILED = "failed"
-
+__all__ = ["DocumentStatus", "TenderStatus"]

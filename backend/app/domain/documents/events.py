@@ -5,54 +5,69 @@ from uuid import UUID, uuid4
 
 
 @dataclass(frozen=True, slots=True)
-class TenderCreated:
+class DocumentUploaded:
+    document_id: UUID
     tender_id: UUID
-    title: str
+    uploaded_by_user_id: UUID
+    file_hash: str
     event_id: UUID = field(default_factory=uuid4)
     occurred_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
     @property
     def aggregate_type(self) -> str:
-        return "tender"
+        return "document"
 
     @property
     def aggregate_id(self) -> UUID:
-        return self.tender_id
+        return self.document_id
 
     @property
     def event_type(self) -> str:
         return type(self).__name__
 
     def payload(self) -> dict[str, Any]:
-        return {"title": self.title}
+        return {
+            "tender_id": str(self.tender_id),
+            "uploaded_by_user_id": str(self.uploaded_by_user_id),
+            "file_hash": self.file_hash,
+        }
 
 
 @dataclass(frozen=True, slots=True)
-class TenderUpdated:
+class DocumentDeleted:
+    document_id: UUID
     tender_id: UUID
-    changed_fields: tuple[str, ...]
+    deleted_by_user_id: UUID
+    file_hash: str
     event_id: UUID = field(default_factory=uuid4)
     occurred_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
     @property
     def aggregate_type(self) -> str:
-        return "tender"
+        return "document"
 
     @property
     def aggregate_id(self) -> UUID:
-        return self.tender_id
+        return self.document_id
 
     @property
     def event_type(self) -> str:
         return type(self).__name__
 
     def payload(self) -> dict[str, Any]:
-        return {"changed_fields": list(self.changed_fields)}
+        return {
+            "tender_id": str(self.tender_id),
+            "deleted_by_user_id": str(self.deleted_by_user_id),
+            "file_hash": self.file_hash,
+        }
 
 
 @dataclass(frozen=True, slots=True)
-class TenderArchived:
+class DuplicateDocumentDetected:
     tender_id: UUID
+    uploaded_by_user_id: UUID
+    file_hash: str
+    original_file_name: str
     event_id: UUID = field(default_factory=uuid4)
     occurred_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
@@ -69,7 +84,11 @@ class TenderArchived:
         return type(self).__name__
 
     def payload(self) -> dict[str, Any]:
-        return {}
+        return {
+            "uploaded_by_user_id": str(self.uploaded_by_user_id),
+            "file_hash": self.file_hash,
+            "original_file_name": self.original_file_name,
+        }
 
 
-TenderEvent = TenderCreated | TenderUpdated | TenderArchived
+DocumentEvent = DocumentUploaded | DocumentDeleted | DuplicateDocumentDetected

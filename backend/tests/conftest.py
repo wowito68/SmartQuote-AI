@@ -10,13 +10,14 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.config.settings import get_settings
 
-SQLITE_DB_PATH = Path("/tmp/smartquote_iteration3_test.db")
+SQLITE_DB_PATH = Path("/tmp/smartquote_iteration4_test.db")
 DEFAULT_TEST_DATABASE_URL = f"sqlite+pysqlite:///{SQLITE_DB_PATH}"
 TEST_DATABASE_URL = os.environ.get("SMARTQUOTE_DATABASE_URL", DEFAULT_TEST_DATABASE_URL)
 USING_SQLITE = TEST_DATABASE_URL.startswith("sqlite")
 
 os.environ.setdefault("SMARTQUOTE_DATABASE_URL", TEST_DATABASE_URL)
 os.environ["SMARTQUOTE_ENVIRONMENT"] = "test"
+os.environ.setdefault("SMARTQUOTE_STORAGE_ROOT", "/tmp/smartquote_iteration4_storage")
 get_settings.cache_clear()
 
 
