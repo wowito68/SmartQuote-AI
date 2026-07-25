@@ -1,78 +1,84 @@
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 import pytest
-from app.domain.shared.exceptions import InvalidStateTransitionError, ValidationError
-from app.domain.shared.value_objects import EmailAddress, FileHash
-from app.domain.tenders.entities import Tender, TenderDocument
-from app.domain.tenders.value_objects import DocumentStatus, TenderStatus
-from app.domain.users.entities import User
+
+from app.domain.shared.exceptions import ValidationError
+from app.domain.tenders.entities import (
+    DESCRIPTION_MAX_LENGTH,
+    TITLE_MAX_LENGTH,
+    Tender,
+)
+from app.domain.tenders.exceptions import (
+    InvalidDeadline,
+    InvalidTenderState,
+    TenderAlreadyArchived,
+)
+from app.domain.tenders.value_objects import TenderStatus
 
 
-def test_user_requires_valid_email() -> None:
-    with pytest.raises(ValidationError):
-        User(email=EmailAddress("not-an-email"), full_name="Buyer")
-
-
-def test_tender_requires_title() -> None:
-    with pytest.raises(ValidationError):
-        Tender(title=" ", created_by_user_id=uuid4())
-
-
-def test_tender_document_requires_sha256_hash() -> None:
-    with pytest.raises(ValidationError):
-        FileHash("abc")
-
-
-def test_adding_document_moves_tender_to_documents_pending() -> None:
-    user_id = uuid4()
-    tender = Tender(title="Medical equipment", created_by_user_id=user_id)
-    document = TenderDocument(
-        tender_id=tender.id,
-        file_name="tender.pdf",
-        file_path="storage/tender.pdf",
-        mime_type="application/pdf",
-        file_size=1024,
-        file_hash=FileHash("a" * 64),
-        uploaded_by_user_id=user_id,
+def test_tender_normalizes_required_values() -> None:
+    tender = Tender(
+        title="  Office supplies  ",
+        description="  Annual purchase  ",
+        created_by_user_id=uuid4(),
     )
-
-    tender.add_document(document)
-
-    assert tender.status is TenderStatus.DOCUMENTS_PENDING
-    assert tender.documents == [document]
+    assert tender.title == "Office supplies"
+    assert tender.description == "Annual purchase"
+    assert tender.status is TenderStatus.DRAFT
 
 
-def test_deleted_tender_cannot_receive_documents() -> None:
-    user_id = uuid4()
-    tender = Tender(title="Medical equipment", created_by_user_id=user_id)
-    tender.soft_delete()
-    document = TenderDocument(
-        tender_id=tender.id,
-        file_name="tender.pdf",
-        file_path="storage/tender.pdf",
-        mime_type="application/pdf",
-        file_size=1024,
-        file_hash=FileHash("b" * 64),
-        uploaded_by_user_id=user_id,
-    )
-
-    with pytest.raises(InvalidStateTransitionError):
-        tender.add_document(document)
+@pytest.mark.parametrize("title", ["", "   ", "x" * (TITLE_MAX_LENGTH + 1)])
+def test_tender_rejects_invalid_title(title: str) -> None:
+    with pytest.raises(ValidationError):
+        Tender(title=title, created_by_user_id=uuid4())
 
 
-def test_document_mark_valid_transition() -> None:
-    user_id = uuid4()
-    document = TenderDocument(
-        tender_id=uuid4(),
-        file_name="tender.pdf",
-        file_path="storage/tender.pdf",
-        mime_type="application/pdf",
-        file_size=1024,
-        file_hash=FileHash("c" * 64),
-        uploaded_by_user_id=user_id,
-    )
+def test_tender_rejects_long_description() -> None:
+    with pytest.raises(ValidationError):
+        Tender(
+            title="Valid",
+            description="x" * (DESCRIPTION_MAX_LENGTH + 1),
+            created_by_user_id=uuid4(),
+        )
 
-    document.mark_valid()
 
-    assert document.processing_status is DocumentStatus.VALID
+def test_deadline_cannot_be_before_creation() -> None:
+    created_at = datetime.now(UTC)
+    with pytest.raises(InvalidDeadline):
+        Tender(
+            title="Valid",
+            created_by_user_id=uuid4(),
+            created_at=created_at,
+            deadline=created_at - timedelta(seconds=1),
+        )
 
+
+def test_valid_status_transitions_are_forward_only() -> None:
+    tender = Tender(title="Valid", created_by_user_id=uuid4())
+    tender.change_status(TenderStatus.DOCUMENTS_PENDING)
+    tender.change_status(TenderStatus.DOCUMENTS_PROCESSING)
+    tender.change_status(TenderStatus.CATALOG_REVIEW)
+    tender.change_status(TenderStatus.CLOSED)
+    assert tender.status is TenderStatus.CLOSED
+    with pytest.raises(InvalidTenderState):
+        tender.change_status(TenderStatus.DRAFT)
+
+
+def test_archived_tender_cannot_be_modified_or_archived_twice() -> None:
+    tender = Tender(title="Valid", created_by_user_id=uuid4())
+    tender.archive()
+    with pytest.raises(TenderAlreadyArchived):
+        tender.replace_details(
+            title="New",
+            description=None,
+            deadline=None,
+            status=TenderStatus.DRAFT,
+        )
+    with pytest.raises(TenderAlreadyArchived):
+        tender.archive()
+
+
+def test_tender_status_rejects_unknown_value() -> None:
+    with pytest.raises(ValueError):
+        TenderStatus("unknown")

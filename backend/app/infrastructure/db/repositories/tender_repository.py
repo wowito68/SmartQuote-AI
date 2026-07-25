@@ -21,15 +21,16 @@ class SqlAlchemyTenderRepository(TenderRepository):
         model = tender_to_model(tender)
         self._session.add(model)
         self._session.flush()
-        self._session.refresh(model)
         return tender_to_domain(model)
 
-    def get_by_id(self, tender_id: UUID) -> Tender | None:
+    def get_by_id(self, tender_id: UUID, *, include_archived: bool = False) -> Tender | None:
         statement = (
             select(TenderModel)
             .options(selectinload(TenderModel.documents))
-            .where(TenderModel.id == tender_id, TenderModel.deleted_at.is_(None))
+            .where(TenderModel.id == tender_id)
         )
+        if not include_archived:
+            statement = statement.where(TenderModel.deleted_at.is_(None))
         model = self._session.scalars(statement).first()
         return tender_to_domain(model) if model else None
 
@@ -51,24 +52,14 @@ class SqlAlchemyTenderRepository(TenderRepository):
         model = self._session.scalars(statement).first()
         if model is None:
             raise ValueError("Tender does not exist.")
-
         update_tender_model(model, tender)
         self._session.flush()
-        self._session.refresh(model)
         return tender_to_domain(model)
 
     def delete(self, tender_id: UUID) -> bool:
-        statement = select(TenderModel).where(
-            TenderModel.id == tender_id,
-            TenderModel.deleted_at.is_(None),
-        )
-        model = self._session.scalars(statement).first()
-        if model is None:
+        tender = self.get_by_id(tender_id)
+        if tender is None:
             return False
-
-        tender = tender_to_domain(model)
-        tender.soft_delete()
-        update_tender_model(model, tender)
-        self._session.flush()
+        tender.archive()
+        self.update(tender)
         return True
-

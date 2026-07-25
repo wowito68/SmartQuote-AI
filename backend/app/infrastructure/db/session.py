@@ -8,7 +8,8 @@ from app.config.settings import get_settings
 
 def create_database_engine(database_url: str | None = None) -> Engine:
     url = database_url or get_settings().database_url.get_secret_value()
-    return create_engine(url, pool_pre_ping=True)
+    connect_args = {"check_same_thread": False} if url.startswith("sqlite") else {}
+    return create_engine(url, pool_pre_ping=True, connect_args=connect_args)
 
 
 def create_session_factory(engine: Engine) -> sessionmaker[Session]:
@@ -22,4 +23,3 @@ SessionLocal = create_session_factory(engine)
 def get_db_session() -> Generator[Session]:
     with SessionLocal() as session:
         yield session
-

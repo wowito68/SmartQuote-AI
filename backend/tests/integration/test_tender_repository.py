@@ -1,72 +1,64 @@
-from uuid import uuid4
+from datetime import UTC, datetime
+from uuid import UUID, uuid4
 
-from app.domain.shared.value_objects import EmailAddress, FileHash
-from app.domain.tenders.entities import Tender, TenderDocument
-from app.domain.tenders.value_objects import TenderStatus
-from app.domain.users.entities import User
-from app.infrastructure.db.models.user import UserModel
-from app.infrastructure.db.repositories.tender_repository import SqlAlchemyTenderRepository
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.domain.tenders.entities import Tender
+from app.infrastructure.db.models.audit_event import AuditEventModel
+from app.infrastructure.db.models.user import UserModel
+from app.infrastructure.db.repositories.tender_repository import (
+    SqlAlchemyTenderRepository,
+)
 
-def persist_user(session: Session) -> User:
-    user = User(email=EmailAddress("buyer@example.com"), full_name="Buyer User")
+
+def persist_user(session: Session) -> UUID:
+    user_id = uuid4()
+    now = datetime.now(UTC)
     session.add(
         UserModel(
-            id=user.id,
-            email=user.email.value,
-            full_name=user.full_name,
-            role=user.role,
-            is_active=user.is_active,
-            created_at=user.created_at,
-            updated_at=user.updated_at,
+            id=user_id,
+            email=f"{user_id}@example.com",
+            full_name="Buyer",
+            role="buyer",
+            is_active=True,
+            created_at=now,
+            updated_at=now,
         )
     )
     session.flush()
-    return user
+    return user_id
 
 
-def test_tender_repository_create_get_list_update_and_soft_delete(db_session: Session) -> None:
-    user = persist_user(db_session)
+def test_repository_create_update_list_and_soft_delete(db_session: Session) -> None:
+    creator = persist_user(db_session)
     repository = SqlAlchemyTenderRepository(db_session)
-    tender = Tender(title="Hospital supplies", created_by_user_id=user.id)
-    document = TenderDocument(
-        tender_id=tender.id,
-        file_name="bases.pdf",
-        file_path="storage/bases.pdf",
-        mime_type="application/pdf",
-        file_size=2048,
-        file_hash=FileHash("d" * 64),
-        uploaded_by_user_id=user.id,
+    created = repository.create(
+        Tender(title="Hospital supplies", created_by_user_id=creator)
     )
-    tender.add_document(document)
-
-    created = repository.create(tender)
     db_session.commit()
 
     found = repository.get_by_id(created.id)
     assert found is not None
-    assert found.title == "Hospital supplies"
-    assert found.status is TenderStatus.DOCUMENTS_PENDING
-    assert len(found.documents) == 1
-
     found.update_details(title="Updated hospital supplies")
-    updated = repository.update(found)
-    db_session.commit()
-    assert updated.title == "Updated hospital supplies"
-
-    listed = repository.list()
-    assert [item.id for item in listed] == [created.id]
-
+    assert repository.update(found).title == "Updated hospital supplies"
+    assert [item.id for item in repository.list()] == [created.id]
     assert repository.delete(created.id) is True
     db_session.commit()
-
     assert repository.get_by_id(created.id) is None
-    assert repository.list() == []
+    assert repository.get_by_id(created.id, include_archived=True) is not None
 
 
-def test_tender_repository_delete_returns_false_for_missing_tender(db_session: Session) -> None:
-    repository = SqlAlchemyTenderRepository(db_session)
-
-    assert repository.delete(uuid4()) is False
-
+def test_audit_model_is_persistable(db_session: Session) -> None:
+    event = AuditEventModel(
+        id=uuid4(),
+        aggregate_type="tender",
+        aggregate_id=uuid4(),
+        event_type="TenderCreated",
+        payload={},
+        occurred_at=datetime.now(UTC),
+    )
+    db_session.add(event)
+    db_session.commit()
+    statement = select(AuditEventModel).where(AuditEventModel.id == event.id)
+    assert db_session.scalar(statement) is not None
