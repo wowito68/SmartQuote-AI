@@ -206,6 +206,7 @@ Todos los eventos se confirman en la misma transacción que la licitación.
 - `backend/app/infrastructure/db/models/__init__.py`
 - `backend/app/infrastructure/db/repositories/tender_repository.py`
 - `backend/app/infrastructure/db/session.py`
+- `backend/pyproject.toml`
 - `backend/tests/conftest.py`
 - `backend/tests/integration/test_migrations.py`
 - `backend/tests/integration/test_tender_repository.py`
