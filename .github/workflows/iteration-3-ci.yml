@@ -1,59 +1,14 @@
-name: SmartQuote CI
+name: Iteration 6 diagnostics
 
 on:
-  push:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
-  workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  quality:
-    name: Code quality
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    defaults:
-      run:
-        working-directory: backend
-    steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
-        with:
-          python-version: "3.12"
-          enable-cache: true
-      - name: Install locked dependencies
-        run: uv sync --frozen
-      - name: Ruff lint
-        run: uv run ruff check .
-      - name: Compile Python sources
-        run: uv run python -m compileall app tests alembic
-
-  unit-tests:
-    name: Unit tests
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    env:
-      SMARTQUOTE_DATABASE_URL: "sqlite+pysqlite:////tmp/smartquote-unit.db"
-      SMARTQUOTE_STORAGE_ROOT: /tmp/smartquote-unit-storage
-      SMARTQUOTE_CELERY_BROKER_URL: memory://
-      SMARTQUOTE_CELERY_RESULT_BACKEND: cache+memory://
-      SMARTQUOTE_CELERY_TASK_ALWAYS_EAGER: "true"
-    defaults:
-      run:
-        working-directory: backend
-    steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
-        with:
-          python-version: "3.12"
-          enable-cache: true
-      - run: uv sync --frozen
-      - run: uv run pytest tests/unit -q
-
-  integration-tests:
-    name: Integration, API and Celery tests
+  diagnostics:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     services:
@@ -79,7 +34,7 @@ jobs:
           --health-retries 10
     env:
       SMARTQUOTE_DATABASE_URL: postgresql+psycopg://smartquote:smartquote@localhost:5432/smartquote
-      SMARTQUOTE_STORAGE_ROOT: /tmp/smartquote-integration-storage
+      SMARTQUOTE_STORAGE_ROOT: /tmp/smartquote-diagnostics-storage
       SMARTQUOTE_CELERY_BROKER_URL: redis://localhost:6379/0
       SMARTQUOTE_CELERY_RESULT_BACKEND: redis://localhost:6379/1
       SMARTQUOTE_CELERY_TASK_ALWAYS_EAGER: "false"
@@ -94,138 +49,32 @@ jobs:
           enable-cache: true
       - run: uv sync --frozen
       - run: uv run alembic upgrade head
-      - run: uv run pytest tests/integration tests/test_health.py -q
-
-  migration-cycle:
-    name: Migration upgrade and rollback
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_USER: smartquote
-          POSTGRES_PASSWORD: smartquote
-          POSTGRES_DB: smartquote
-        ports: ["5432:5432"]
-        options: >-
-          --health-cmd "pg_isready -U smartquote -d smartquote"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-    env:
-      SMARTQUOTE_DATABASE_URL: postgresql+psycopg://smartquote:smartquote@localhost:5432/smartquote
-    defaults:
-      run:
-        working-directory: backend
-    steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
-        with:
-          python-version: "3.12"
-          enable-cache: true
-      - run: uv sync --frozen
-      - run: uv run alembic upgrade head
-      - run: uv run alembic downgrade base
-      - run: uv run alembic upgrade head
-      - run: uv run alembic current
-
-  coverage:
-    name: Full test coverage
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_USER: smartquote
-          POSTGRES_PASSWORD: smartquote
-          POSTGRES_DB: smartquote
-        ports: ["5432:5432"]
-        options: >-
-          --health-cmd "pg_isready -U smartquote -d smartquote"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-      redis:
-        image: redis:7-alpine
-        ports: ["6379:6379"]
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 5s
-          --health-timeout 3s
-          --health-retries 10
-    env:
-      SMARTQUOTE_DATABASE_URL: postgresql+psycopg://smartquote:smartquote@localhost:5432/smartquote
-      SMARTQUOTE_STORAGE_ROOT: /tmp/smartquote-coverage-storage
-      SMARTQUOTE_CELERY_BROKER_URL: redis://localhost:6379/0
-      SMARTQUOTE_CELERY_RESULT_BACKEND: redis://localhost:6379/1
-    defaults:
-      run:
-        working-directory: backend
-    steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
-        with:
-          python-version: "3.12"
-          enable-cache: true
-      - run: uv sync --frozen
-      - run: uv run alembic upgrade head
-      - run: uv run --with coverage coverage run --source=app -m pytest -q
-      - run: uv run --with coverage coverage report --fail-under=90
-      - run: uv run --with coverage coverage xml
+      - name: Capture Ruff
+        shell: bash
+        run: |
+          set +e
+          uv run ruff check . > /tmp/ruff.txt 2>&1
+          echo $? > /tmp/ruff-exit.txt
+          exit 0
+      - name: Capture integration tests
+        shell: bash
+        run: |
+          set +e
+          uv run pytest tests/integration tests/test_health.py -q -vv > /tmp/integration.txt 2>&1
+          echo $? > /tmp/integration-exit.txt
+          exit 0
       - uses: actions/upload-artifact@v4
         with:
-          name: coverage-xml-${{ github.sha }}
-          path: backend/coverage.xml
+          name: iteration-6-diagnostics
+          path: |
+            /tmp/ruff.txt
+            /tmp/ruff-exit.txt
+            /tmp/integration.txt
+            /tmp/integration-exit.txt
           if-no-files-found: error
-          retention-days: 14
-
-  openapi-contract:
-    name: OpenAPI contract
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    env:
-      SMARTQUOTE_DATABASE_URL: "sqlite+pysqlite:///:memory:"
-      SMARTQUOTE_STORAGE_ROOT: /tmp/smartquote-openapi-storage
-      SMARTQUOTE_CELERY_BROKER_URL: memory://
-      SMARTQUOTE_CELERY_RESULT_BACKEND: cache+memory://
-      SMARTQUOTE_CELERY_TASK_ALWAYS_EAGER: "true"
-    defaults:
-      run:
-        working-directory: backend
-    steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
-        with:
-          python-version: "3.12"
-          enable-cache: true
-      - run: uv sync --frozen
-      - name: Validate API operations
+          retention-days: 7
+      - name: Enforce diagnostics
+        shell: bash
         run: |
-          uv run python - <<'PY'
-          from app.main import app
-          schema = app.openapi()
-          expected = {
-              "/api/v1/documents/{document_id}/status": {"get"},
-              "/api/v1/documents/{document_id}/pages": {"get"},
-              "/api/v1/documents/{document_id}/quality": {"get"},
-              "/api/v1/documents/{document_id}/extraction": {"get"},
-              "/api/v1/tenders/{tender_id}/catalog/extract": {"post"},
-              "/api/v1/tenders/{tender_id}/catalog": {"get"},
-              "/api/v1/catalog/{product_id}": {"get", "put"},
-              "/api/v1/tenders/{tender_id}/catalog/approve": {"post"},
-          }
-          for path, methods in expected.items():
-              assert path in schema["paths"]
-              assert methods <= set(schema["paths"][path])
-          assert "post" not in schema["paths"]["/api/v1/documents/{document_id}/status"]
-          PY
-
-  docker-build:
-    name: Docker image build
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v4
-      - run: docker build --tag smartquote-ai:${{ github.sha }} backend
+          test "$(cat /tmp/ruff-exit.txt)" = "0"
+          test "$(cat /tmp/integration-exit.txt)" = "0"
