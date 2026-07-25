@@ -28,7 +28,7 @@ async def parse_document_upload(
             raise DocumentTooLarge("Multipart upload exceeds the configured request limit.")
 
     envelope = (
-        f"Content-Type: {content_type}\r\nMIME-Version: 1.0\r\n\r\n".encode("utf-8")
+        f"Content-Type: {content_type}\r\nMIME-Version: 1.0\r\n\r\n".encode()
         + bytes(body)
     )
     message = BytesParser(policy=default).parsebytes(envelope)

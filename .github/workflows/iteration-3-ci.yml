@@ -30,26 +30,7 @@ jobs:
       - name: Install dependencies
         run: uv sync --frozen
 
-      - name: Generate Ruff fix patch
-        run: |
-          uv run ruff check . --fix || true
-          git diff > ruff-fix.patch
-          uv run ruff check . > ruff-report.txt 2>&1 || true
-
-      - name: Upload Ruff diagnostics
-        uses: actions/upload-artifact@v4
-        with:
-          name: iteration-4-ruff-diagnostics
-          path: |
-            backend/ruff-fix.patch
-            backend/ruff-report.txt
-          if-no-files-found: error
-          retention-days: 7
-
-      - name: Enforce committed Ruff fixes
-        run: test ! -s ruff-fix.patch
-
-      - name: Enforce Ruff lint
+      - name: Ruff lint
         run: uv run ruff check .
 
       - name: Compile Python sources

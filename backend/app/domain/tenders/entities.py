@@ -4,7 +4,7 @@ from uuid import UUID, uuid4
 
 from app.domain.documents.entities import TenderDocument
 from app.domain.documents.exceptions import DuplicateDocument
-from app.domain.shared.exceptions import InvalidStateTransitionError, ValidationError
+from app.domain.shared.exceptions import ValidationError
 from app.domain.tenders.exceptions import InvalidDeadline, InvalidTenderState, TenderAlreadyArchived
 from app.domain.tenders.value_objects import TenderStatus
 

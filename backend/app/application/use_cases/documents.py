@@ -1,3 +1,4 @@
+from contextlib import suppress
 from uuid import UUID, uuid4
 
 from app.application.dtos.document import (
@@ -122,10 +123,8 @@ class UploadTenderDocument:
             except Exception:
                 uow.rollback()
                 for storage_key in stored_keys:
-                    try:
+                    with suppress(Exception):
                         self._file_storage.delete(storage_key)
-                    except Exception:
-                        pass
                 raise
 
         items = tuple(TenderDocumentResponse.from_entity(item) for item in created_documents)
