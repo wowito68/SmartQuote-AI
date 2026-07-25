@@ -13,7 +13,7 @@ jobs:
       github.event.pull_request.head.ref == 'agent/iteration-6-ai-product-extraction' &&
       github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - name: Checkout implementation branch
         uses: actions/checkout@v4
@@ -21,12 +21,20 @@ jobs:
           ref: agent/iteration-6-ai-product-extraction
           fetch-depth: 0
 
-      - name: Verify and extract implementation
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+
+      - name: Reconstruct and verify implementation
         shell: bash
         run: |
           set -euo pipefail
-          echo "06396402408a42827aae086622d46eb31ef93bfdaaba8581971c5185ad0d6e45  .iteration6/package.tar.gz" | sha256sum --check
-          tar --extract --gzip --file .iteration6/package.tar.gz
+          cat .iteration6/chunk-* | base64 --decode > /tmp/iteration6.tar.gz
+          echo "a066d6941aec5ad90df76dae5a2f5f21f6495dc371ff584cc0c8c3ba030f2150  /tmp/iteration6.tar.gz" | sha256sum --check
+          tar --extract --gzip --file /tmp/iteration6.tar.gz
+          cd backend
+          uv lock
 
       - name: Commit implementation
         shell: bash
