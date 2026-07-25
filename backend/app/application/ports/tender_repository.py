@@ -10,7 +10,7 @@ class TenderRepository(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def get_by_id(self, tender_id: UUID) -> Tender | None:
+    def get_by_id(self, tender_id: UUID, *, include_archived: bool = False) -> Tender | None:
         raise NotImplementedError
 
     @abstractmethod
@@ -24,4 +24,3 @@ class TenderRepository(ABC):
     @abstractmethod
     def delete(self, tender_id: UUID) -> bool:
         raise NotImplementedError
-
