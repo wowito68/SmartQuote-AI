@@ -5,6 +5,16 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from app.application.exceptions import TenderCreatorNotFound, TenderNotFound
+from app.domain.documents.exceptions import (
+    DocumentAlreadyDeleted,
+    DocumentNotFound,
+    DocumentStorageFailure,
+    DocumentTooLarge,
+    DocumentUploaderNotFound,
+    DuplicateDocument,
+    InvalidDocumentFile,
+    TooManyDocuments,
+)
 from app.domain.shared.exceptions import ValidationError
 from app.domain.tenders.exceptions import (
     InvalidDeadline,
@@ -54,6 +64,63 @@ def register_exception_handlers(app: FastAPI) -> None:
         return _response(
             status.HTTP_422_UNPROCESSABLE_CONTENT,
             "invalid_deadline",
+            str(exc),
+        )
+
+    @app.exception_handler(DocumentNotFound)
+    async def document_not_found_handler(_: Request, exc: DocumentNotFound) -> JSONResponse:
+        return _response(status.HTTP_404_NOT_FOUND, "document_not_found", str(exc))
+
+    @app.exception_handler(DocumentAlreadyDeleted)
+    async def document_deleted_handler(
+        _: Request,
+        exc: DocumentAlreadyDeleted,
+    ) -> JSONResponse:
+        return _response(status.HTTP_409_CONFLICT, "document_already_deleted", str(exc))
+
+    @app.exception_handler(DuplicateDocument)
+    async def duplicate_document_handler(_: Request, exc: DuplicateDocument) -> JSONResponse:
+        return _response(status.HTTP_409_CONFLICT, "duplicate_document", str(exc))
+
+    @app.exception_handler(DocumentTooLarge)
+    async def document_too_large_handler(_: Request, exc: DocumentTooLarge) -> JSONResponse:
+        return _response(status.HTTP_413_CONTENT_TOO_LARGE, "document_too_large", str(exc))
+
+    @app.exception_handler(TooManyDocuments)
+    async def too_many_documents_handler(_: Request, exc: TooManyDocuments) -> JSONResponse:
+        return _response(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "too_many_documents",
+            str(exc),
+        )
+
+    @app.exception_handler(InvalidDocumentFile)
+    async def invalid_document_handler(_: Request, exc: InvalidDocumentFile) -> JSONResponse:
+        return _response(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "invalid_document_file",
+            str(exc),
+        )
+
+    @app.exception_handler(DocumentUploaderNotFound)
+    async def uploader_not_found_handler(
+        _: Request,
+        exc: DocumentUploaderNotFound,
+    ) -> JSONResponse:
+        return _response(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "document_user_not_found",
+            str(exc),
+        )
+
+    @app.exception_handler(DocumentStorageFailure)
+    async def storage_failure_handler(
+        _: Request,
+        exc: DocumentStorageFailure,
+    ) -> JSONResponse:
+        return _response(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "document_storage_unavailable",
             str(exc),
         )
 

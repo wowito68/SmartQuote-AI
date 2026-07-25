@@ -1,9 +1,9 @@
 from abc import ABC, abstractmethod
 
-from app.domain.tenders.events import TenderEvent
+from app.domain.shared.events import DomainEvent
 
 
 class AuditEventRepository(ABC):
     @abstractmethod
-    def append(self, event: TenderEvent) -> None:
+    def append(self, event: DomainEvent) -> None:
         raise NotImplementedError

@@ -2,10 +2,11 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
-from app.domain.shared.exceptions import InvalidStateTransitionError, ValidationError
-from app.domain.shared.value_objects import FileHash
+from app.domain.documents.entities import TenderDocument
+from app.domain.documents.exceptions import DuplicateDocument
+from app.domain.shared.exceptions import ValidationError
 from app.domain.tenders.exceptions import InvalidDeadline, InvalidTenderState, TenderAlreadyArchived
-from app.domain.tenders.value_objects import DocumentStatus, TenderStatus
+from app.domain.tenders.value_objects import TenderStatus
 
 TITLE_MAX_LENGTH = 255
 DESCRIPTION_MAX_LENGTH = 5000
@@ -53,51 +54,6 @@ def _normalize_description(value: str | None) -> str | None:
 
 
 @dataclass(slots=True)
-class TenderDocument:
-    tender_id: UUID
-    file_name: str
-    file_path: str
-    mime_type: str
-    file_size: int
-    file_hash: FileHash
-    uploaded_by_user_id: UUID
-    document_type: str = "tender_pdf"
-    processing_status: DocumentStatus = DocumentStatus.UPLOADED
-    requires_ocr: bool = False
-    id: UUID = field(default_factory=uuid4)
-    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
-    updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
-
-    def __post_init__(self) -> None:
-        if not self.file_name.strip():
-            raise ValidationError("Document file name is required.")
-        if not self.file_path.strip():
-            raise ValidationError("Document file path is required.")
-        if not self.mime_type.strip():
-            raise ValidationError("Document MIME type is required.")
-        if self.file_size <= 0:
-            raise ValidationError("Document file size must be greater than zero.")
-        if not self.document_type.strip():
-            raise ValidationError("Document type is required.")
-        self.file_name = self.file_name.strip()
-        self.file_path = self.file_path.strip()
-        self.mime_type = self.mime_type.strip().lower()
-        self.document_type = self.document_type.strip()
-        self.created_at = _as_utc(self.created_at)
-        self.updated_at = _as_utc(self.updated_at)
-
-    def mark_valid(self) -> None:
-        if self.processing_status not in {DocumentStatus.UPLOADED, DocumentStatus.VALIDATING}:
-            raise InvalidStateTransitionError("Only uploaded documents can be marked valid.")
-        self.processing_status = DocumentStatus.VALID
-        self.updated_at = datetime.now(UTC)
-
-    def mark_rejected(self) -> None:
-        self.processing_status = DocumentStatus.REJECTED
-        self.updated_at = datetime.now(UTC)
-
-
-@dataclass(slots=True)
 class Tender:
     title: str
     created_by_user_id: UUID
@@ -134,10 +90,19 @@ class Tender:
             raise InvalidDeadline("Tender deadline cannot be earlier than its creation date.")
         return normalized
 
-    def add_document(self, document: TenderDocument) -> None:
+    def ensure_accepts_documents(self) -> None:
         self._ensure_active()
+        if self.status not in {TenderStatus.DRAFT, TenderStatus.DOCUMENTS_PENDING}:
+            raise InvalidTenderState(
+                "Documents can only be uploaded while a tender is draft or documents_pending."
+            )
+
+    def add_document(self, document: TenderDocument) -> None:
+        self.ensure_accepts_documents()
         if document.tender_id != self.id:
             raise ValidationError("Document belongs to a different tender.")
+        if any(existing.file_hash == document.file_hash for existing in self.documents):
+            raise DuplicateDocument("The same document already exists for this tender.")
         self.documents.append(document)
         if self.status == TenderStatus.DRAFT:
             self.change_status(TenderStatus.DOCUMENTS_PENDING)

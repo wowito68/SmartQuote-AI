@@ -7,8 +7,11 @@ services:
       - .env.example
     environment:
       SMARTQUOTE_DATABASE_URL: postgresql+psycopg://smartquote:smartquote@postgres:5432/smartquote
+      SMARTQUOTE_STORAGE_ROOT: /app/storage/private
     ports:
       - "8000:8000"
+    volumes:
+      - document_storage:/app/storage/private
     command: uv run uvicorn app.main:app --host 0.0.0.0 --port 8000
 
   postgres:
@@ -24,3 +27,4 @@ services:
 
 volumes:
   postgres_data:
+  document_storage:

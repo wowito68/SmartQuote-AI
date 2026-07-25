@@ -2,20 +2,20 @@
 
 El workflow `.github/workflows/iteration-3-ci.yml` se ejecuta automáticamente en:
 
-- cada `push` a cualquier rama, por lo que cada commit enviado a GitHub se valida;
+- cada `push` a cualquier rama;
 - apertura, actualización, reapertura o paso a revisión de un pull request;
 - ejecución manual mediante `workflow_dispatch`.
 
 ## Checks automáticos
 
-1. **Code quality**: Ruff lint, Ruff format y compilación de fuentes Python.
-2. **Unit tests**: pruebas unitarias de Domain y Application.
-3. **Integration and API tests**: repositorios, migraciones y endpoints con PostgreSQL 16.
+1. **Code quality**: Ruff lint y compilación de fuentes Python.
+2. **Unit tests**: pruebas de Domain, Application, validación y almacenamiento.
+3. **Integration and API tests**: repositorios, multipart, almacenamiento local y endpoints con PostgreSQL 16.
 4. **Migration upgrade and rollback**: `upgrade head`, `downgrade base` y segundo `upgrade head`.
 5. **Full test coverage**: suite completa con umbral mínimo de 90% y reporte XML descargable.
-6. **OpenAPI contract**: confirma que las rutas y métodos públicos esperados permanezcan publicados.
-7. **Docker image build**: valida que la imagen del backend pueda construirse.
+6. **OpenAPI contract**: confirma rutas de licitaciones, documentos, descarga y contrato multipart.
+7. **Docker image build**: valida que la imagen del backend pueda construirse con el lockfile aprobado.
 
-Un commit que solo existe localmente no puede ser probado por GitHub. La ejecución comienza cuando el commit se publica mediante `push` o forma parte de una actualización de pull request.
+Los trabajos de integración usan directorios temporales privados para los documentos y eliminan los datos mediante fixtures de prueba.
 
-El workflow evita filtros por rutas para que cambios en código, configuración o documentación se validen de la misma manera.
+Un commit local comienza a validarse cuando se publica mediante `push` o forma parte de una actualización de pull request.
