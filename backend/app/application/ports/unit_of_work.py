@@ -3,6 +3,7 @@ from collections.abc import Callable
 from types import TracebackType
 
 from app.application.ports.audit_event_repository import AuditEventRepository
+from app.application.ports.catalog_repository import CatalogRepository
 from app.application.ports.document_repository import TenderDocumentRepository
 from app.application.ports.extraction_repository import ExtractionRepository
 from app.application.ports.tender_repository import TenderRepository
@@ -14,6 +15,7 @@ class UnitOfWork(ABC):
     documents: TenderDocumentRepository
     extractions: ExtractionRepository
     audit_events: AuditEventRepository
+    catalogs: CatalogRepository
     users: UserLookup
 
     @abstractmethod

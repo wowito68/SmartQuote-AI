@@ -8,7 +8,18 @@ def test_migrations_create_tender_and_audit_tables(
     migrated_database: None,
 ) -> None:
     inspector = inspect(db_engine)
-    expected_tables = {"users", "tenders", "tender_documents", "audit_events"}
+    expected_tables = {
+        "users",
+        "tenders",
+        "tender_documents",
+        "audit_events",
+        "ai_extraction_runs",
+        "catalog_products",
+        "catalog_product_revisions",
+        "extracted_evidence",
+        "evidence_references",
+        "catalog_snapshots",
+    }
     assert expected_tables.issubset(inspector.get_table_names())
 
     document_columns = {

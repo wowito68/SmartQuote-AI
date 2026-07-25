@@ -211,6 +211,10 @@ jobs:
               "/api/v1/documents/{document_id}/pages": {"get"},
               "/api/v1/documents/{document_id}/quality": {"get"},
               "/api/v1/documents/{document_id}/extraction": {"get"},
+              "/api/v1/tenders/{tender_id}/catalog/extract": {"post"},
+              "/api/v1/tenders/{tender_id}/catalog": {"get"},
+              "/api/v1/catalog/{product_id}": {"get", "put"},
+              "/api/v1/tenders/{tender_id}/catalog/approve": {"post"},
           }
           for path, methods in expected.items():
               assert path in schema["paths"]

@@ -12,3 +12,9 @@ El workflow valida:
 8. construcción de la imagen Docker.
 
 El lockfile resuelto se publica temporalmente como artifact durante el desarrollo de la iteración y se fija antes de cerrar el PR.
+
+## Validaciones de la Iteración 6
+
+El job de integración mantiene PostgreSQL 16 y Redis 7. La suite nueva prueba la cola `ai-extraction`, un worker Celery real y el flujo completo de catálogo, pero sustituye el proveedor OpenAI por una respuesta estructurada local. Ningún check de CI realiza llamadas facturables ni requiere una clave real.
+
+El contrato OpenAPI verifica los cinco endpoints de catálogo y la cobertura mínima continúa en 90%.

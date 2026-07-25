@@ -8,7 +8,10 @@ celery_app = Celery(
     "smartquote",
     broker=settings.celery_broker_url.get_secret_value(),
     backend=settings.celery_result_backend.get_secret_value(),
-    include=["app.infrastructure.tasks.document_pipeline"],
+    include=[
+        "app.infrastructure.tasks.document_pipeline",
+        "app.infrastructure.tasks.catalog_extraction",
+    ],
 )
 celery_app.conf.update(
     task_serializer="json",
@@ -20,7 +23,10 @@ celery_app.conf.update(
     task_acks_late=True,
     worker_prefetch_multiplier=1,
     task_reject_on_worker_lost=True,
-    task_routes={"smartquote.documents.*": {"queue": "document-processing"}},
+    task_routes={
+        "smartquote.documents.*": {"queue": "document-processing"},
+        "smartquote.catalog.*": {"queue": "ai-extraction"},
+    },
     task_always_eager=settings.celery_task_always_eager,
     task_eager_propagates=True,
     broker_transport_options={"visibility_timeout": 3600},

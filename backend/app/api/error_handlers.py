@@ -5,6 +5,15 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from app.application.exceptions import TenderCreatorNotFound, TenderNotFound
+from app.domain.catalog.exceptions import (
+    AIExtractionFailure,
+    AIExtractionNotFound,
+    AIResponseValidationError,
+    CatalogProductNotFound,
+    InvalidCatalogState,
+    InvalidProductState,
+    PromptNotFound,
+)
 from app.domain.documents.exceptions import (
     DocumentAlreadyDeleted,
     DocumentExtractionFailure,
@@ -91,6 +100,21 @@ def register_exception_handlers(app: FastAPI) -> None:
             status.HTTP_503_SERVICE_UNAVAILABLE,
             "document_extraction_failed",
         ),
+        (CatalogProductNotFound, status.HTTP_404_NOT_FOUND, "catalog_product_not_found"),
+        (AIExtractionNotFound, status.HTTP_404_NOT_FOUND, "ai_extraction_not_found"),
+        (InvalidCatalogState, status.HTTP_409_CONFLICT, "invalid_catalog_state"),
+        (InvalidProductState, status.HTTP_409_CONFLICT, "invalid_product_state"),
+        (
+            AIResponseValidationError,
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "ai_response_validation_error",
+        ),
+        (
+            AIExtractionFailure,
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "ai_extraction_unavailable",
+        ),
+        (PromptNotFound, status.HTTP_503_SERVICE_UNAVAILABLE, "prompt_not_found"),
         (ValidationError, status.HTTP_422_UNPROCESSABLE_CONTENT, "validation_error"),
     ]
 

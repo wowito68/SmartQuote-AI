@@ -10,7 +10,7 @@ Environment = Literal["local", "test", "staging", "production"]
 
 class Settings(BaseSettings):
     project_name: str = Field(default="SmartQuote AI")
-    version: str = Field(default="0.2.0")
+    version: str = Field(default="0.3.0")
     environment: Environment = Field(default="local")
     api_v1_prefix: str = Field(default="/api/v1")
     database_url: SecretStr
@@ -33,6 +33,15 @@ class Settings(BaseSettings):
     quality_ocr_maximum_characters: int = Field(default=50, ge=0)
     quality_ocr_minimum_empty_page_percentage: float = Field(default=50.0, ge=0, le=100)
     quality_ocr_maximum_density: float = Field(default=0.5, ge=0)
+
+    openai_api_key: SecretStr | None = Field(default=None)
+    openai_base_url: str = Field(default="https://api.openai.com/v1")
+    openai_timeout_seconds: float = Field(default=90.0, gt=0, le=600)
+    ai_model: str = Field(default="gpt-5-mini")
+    ai_prompt_version: str = Field(default="1.0.0")
+    ai_temperature: float = Field(default=0.0, ge=0, le=2)
+    ai_input_cost_per_million_tokens: float = Field(default=0.0, ge=0)
+    ai_output_cost_per_million_tokens: float = Field(default=0.0, ge=0)
 
     model_config = SettingsConfigDict(
         env_file=(".env", "../.env"),
