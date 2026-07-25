@@ -2,6 +2,7 @@ from decimal import Decimal
 from uuid import UUID
 
 from celery import Task
+
 from app.application.services.catalog_normalizer import CatalogNormalizer
 from app.application.use_cases.catalog import ProcessAIExtractionRun
 from app.config.settings import get_settings

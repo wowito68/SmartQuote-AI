@@ -143,6 +143,7 @@ class SqlAlchemyCatalogRepository(CatalogRepository):
     ) -> None:
         evidence_model, reference_model = evidence_to_models(evidence, reference)
         self._session.add(evidence_model)
+        self._session.flush()
         self._session.add(reference_model)
         self._session.flush()
 

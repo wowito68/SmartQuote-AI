@@ -3,7 +3,6 @@ import pytest
 from app.application.services.ai_response_validation import validate_ai_payload
 from app.domain.catalog.exceptions import AIResponseValidationError
 
-
 VALID = {
     "products": [
         {
