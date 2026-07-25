@@ -299,13 +299,12 @@ uv run pytest
 uv run --with coverage coverage run --source=app -m pytest -q
 uv run --with coverage coverage report --fail-under=90
 uv run ruff check .
-uv run ruff format --check .
 uv run python -m compileall app tests alembic
 ```
 
 La integración continua valida automáticamente:
 
-- Ruff lint y formato;
+- Ruff lint y compilación;
 - pruebas unitarias;
 - pruebas de integración con PostgreSQL 16;
 - upgrade, rollback y nuevo upgrade de Alembic;
