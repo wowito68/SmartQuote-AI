@@ -10,18 +10,18 @@ Casos de uso de Application:
 - `DeleteTenderDocument`
 - `DownloadTenderDocument`
 
-Capacidades:
+Capacidades entregadas:
 
-- carga individual o múltiple de PDFs;
+- carga individual o múltiple mediante `multipart/form-data`;
 - validación de nombre, extensión, MIME declarado, firma binaria, tamaño y cantidad;
-- SHA-256 y detección de duplicados por licitación;
+- cálculo SHA-256 y detección de duplicados por licitación;
 - almacenamiento privado local;
 - persistencia de metadatos;
 - consulta, listado, descarga y eliminación lógica;
-- auditoría de carga, eliminación y duplicado;
+- auditoría de cargas, eliminaciones y duplicados;
 - punto de extensión para antivirus futuro.
 
-No se implementó extracción de texto, OCR, PyMuPDF, IA, colas ni tareas asíncronas.
+No se implementó extracción de texto, OCR, PyMuPDF, IA, almacenamiento en la nube, colas ni tareas asíncronas.
 
 ## Árbol actualizado
 
@@ -30,225 +30,191 @@ SmartQuote-AI/
 ├── .env.example
 ├── .github/
 │   └── workflows/
-│       └── smartquote-ci.yml
+│       └── iteration-3-ci.yml
 ├── backend/
-│   ├── alembic/
-│   │   └── versions/
-│   │       └── d914a6b4f2c1_document_management.py
+│   ├── alembic/versions/
+│   │   └── d914a6b4f2c1_document_management.py
 │   ├── app/
 │   │   ├── api/
 │   │   │   ├── dependencies.py
 │   │   │   ├── document_schemas.py
-│   │   │   ├── error_handlers.py
 │   │   │   ├── multipart.py
-│   │   │   └── routes/
-│   │   │       └── documents.py
+│   │   │   └── routes/documents.py
 │   │   ├── application/
-│   │   │   ├── dtos/
-│   │   │   │   └── document.py
+│   │   │   ├── dtos/document.py
 │   │   │   ├── ports/
 │   │   │   │   ├── document_repository.py
 │   │   │   │   ├── file_storage.py
 │   │   │   │   └── file_threat_scanner.py
-│   │   │   ├── services/
-│   │   │   │   └── document_validation.py
-│   │   │   └── use_cases/
-│   │   │       └── documents.py
+│   │   │   ├── services/document_validation.py
+│   │   │   └── use_cases/documents.py
 │   │   ├── domain/
 │   │   │   ├── documents/
 │   │   │   │   ├── entities.py
 │   │   │   │   ├── events.py
 │   │   │   │   ├── exceptions.py
 │   │   │   │   └── value_objects.py
-│   │   │   └── shared/
-│   │   │       └── events.py
-│   │   ├── infrastructure/
-│   │   │   ├── db/
-│   │   │   │   ├── mappers/document_mapper.py
-│   │   │   │   ├── repositories/document_repository.py
-│   │   │   │   └── unit_of_work.py
-│   │   │   └── storage/
-│   │   │       └── local_file_storage.py
-│   │   └── main.py
+│   │   │   └── shared/events.py
+│   │   └── infrastructure/
+│   │       ├── db/
+│   │       │   ├── mappers/document_mapper.py
+│   │       │   ├── repositories/document_repository.py
+│   │       │   └── unit_of_work.py
+│   │       └── storage/local_file_storage.py
 │   └── tests/
 │       ├── integration/
 │       │   ├── test_document_endpoints.py
 │       │   └── test_document_repository.py
 │       └── unit/
 │           ├── application/
-│           │   ├── test_document_use_cases.py
-│           │   └── test_document_validation.py
-│           ├── domain/test_shared_and_document_domain.py
-│           └── infrastructure/test_local_file_storage.py
+│           ├── domain/
+│           └── infrastructure/
 ├── docker-compose.yml
-├── docs/
-│   ├── continuous-integration.md
-│   └── iteration-4-document-management.md
+├── docs/continuous-integration.md
+├── docs/iteration-4-document-management.md
 └── README.md
 ```
 
 ## Flujo de carga
 
 1. FastAPI recibe `multipart/form-data`.
-2. `api.multipart` limita el tamaño total y separa `uploaded_by_user_id` y los archivos.
-3. El router construye DTOs de Application sin exponer `UploadFile` fuera de API.
+2. La capa API limita el cuerpo y separa el UUID del usuario y los archivos.
+3. El router crea DTOs de Application.
 4. `DocumentFileValidator` valida cada archivo y calcula SHA-256.
 5. `UploadTenderDocument` abre un Unit of Work.
-6. Se comprueba que la licitación exista y acepte documentos.
+6. Se comprueba que la licitación exista y permita cargas.
 7. Se comprueba que el usuario responsable exista.
-8. Se buscan hashes repetidos tanto en la solicitud como en la base.
-9. `LocalFileStorage` escribe cada archivo con una clave interna segura.
-10. El repositorio persiste `TenderDocument` y el evento `DocumentUploaded`.
-11. La primera carga mueve la licitación de `draft` a `documents_pending`.
-12. El Unit of Work confirma metadatos, estado y auditoría.
-13. Si falla la base después de escribir archivos, Application ejecuta eliminación compensatoria de los archivos nuevos.
+8. Se buscan duplicados dentro de la solicitud y en la base de datos.
+9. `LocalFileStorage` escribe cada PDF con una clave interna segura.
+10. El repositorio persiste `TenderDocument` y los eventos de auditoría.
+11. La primera carga cambia la licitación de `draft` a `documents_pending`.
+12. El Unit of Work confirma metadatos, estado y auditoría en una transacción.
+13. Si la persistencia falla después de escribir archivos, Application ejecuta eliminación compensatoria.
 
-## Diagrama del flujo
+## Diagrama HTTP → almacenamiento físico
 
 ```mermaid
 sequenceDiagram
-    participant Client as Cliente HTTP
+    participant C as Cliente HTTP
     participant API as FastAPI / Multipart
     participant UC as UploadTenderDocument
-    participant Validator as DocumentFileValidator
-    participant Tender as Tender Domain
+    participant V as DocumentFileValidator
     participant UOW as Unit of Work
-    participant Storage as FileStorage
-    participant Repo as Document Repository
-    participant Audit as Audit Repository
+    participant R as Document Repository
+    participant S as FileStorage
     participant DB as PostgreSQL
-    participant Disk as Private Filesystem
+    participant D as Filesystem privado
 
-    Client->>API: multipart/form-data
-    API->>API: Limitar y separar campos
+    C->>API: POST multipart/form-data
     API->>UC: DTO con bytes y metadatos
-    UC->>Validator: Validar PDFs y calcular SHA-256
+    UC->>V: Validar PDFs y calcular SHA-256
     UC->>UOW: Abrir transacción
     UOW->>DB: Consultar licitación y usuario
-    UC->>Tender: ensure_accepts_documents()
-    UC->>Repo: Buscar hash duplicado
-    Repo->>DB: SELECT por tender_id + hash
-    UC->>Storage: store(tender_id, document_id, bytes)
-    Storage->>Disk: Escritura temporal + fsync + rename
-    Storage-->>UC: storage_key opaca
-    UC->>Repo: Crear TenderDocument
-    Repo->>DB: INSERT metadata
-    UC->>Audit: DocumentUploaded
-    Audit->>DB: INSERT audit event
+    UC->>R: Buscar hash duplicado
+    R->>DB: SELECT por tender_id + hash
+    UC->>S: store(tender_id, document_id, bytes)
+    S->>D: temporal + fsync + rename atómico
+    S-->>UC: storage_key opaca
+    UC->>R: Crear TenderDocument
+    R->>DB: INSERT metadatos
+    UC->>DB: INSERT DocumentUploaded
     UC->>UOW: commit
-    UOW->>DB: COMMIT
     UC-->>API: TenderDocumentResponse
-    API-->>Client: 201 Created
+    API-->>C: 201 Created
 ```
 
-## Implementación de FileStorage
+## FileStorage y LocalFileStorage
 
 `FileStorage` es un puerto de Application con tres operaciones:
 
-- `store`: recibe UUID de licitación, UUID de documento y bytes; devuelve una clave opaca.
-- `read`: recupera bytes desde una clave.
-- `delete`: elimina físicamente una clave; se usa para compensar cargas fallidas y queda disponible para políticas oe purga futuras.
-
-`LocalFileStorage` es el primer adaptador:
-
-```text
-<root>/tenders/<tender_uuid>/<document_uuid>.pdf
+```python
+store(tender_id, document_id, content) -> str
+read(storage_key) -> bytes
+delete(storage_key) -> None
 ```
 
-Propiedades:
+`LocalFileStorage` usa esta estructura:
 
-- raíz configurable;
-- archivos fuera de directorios públicos;
-- rutas construidas únicamente con UUIDs;
-- verificación con `resolve` y `relative_to` para bloquear path traversal;
-- directorios privados;
-- archivo temporal exclusivo;
-- `flush` y `fsync`;
-- sustitución atómica con `os.replace`;
-- permisos `0600` cuando el sistema operativo lo permite.
+```text
+<storage_root>/
+└── tenders/
+    └── <tender_uuid>/
+        └── <document_uuid>.pdf
+```
 
-El nombre original nunca forma parte de la ruta física. Se persiste por separado y solo se usa en metadatos y `Content-Disposition`.
+Características:
 
-Un adaptador MinIO o S3 debe implementar el mismo puerto y sustituirse en `get_file_storage`; no requiere cambios en Domain ni en los casos de uso.
+- raíz configurable y privada;
+- nombres físicos basados exclusivamente en UUID;
+- nombre original almacenado solo como metadato;
+- rutas resueltas y verificadas dentro de la raíz;
+- bloqueo de rutas absolutas, `..` y separadores no permitidos;
+- directorios privados y archivos con permisos `0600` cuando el sistema lo permite;
+- archivo temporal exclusivo, `flush`, `fsync` y sustitución atómica.
 
-## Decisiones técnicas
+Para sustituirlo por MinIO o S3 se crea otro adaptador de `FileStorage` y se cambia `get_file_storage`. Domain, DTOs, casos de uso y endpoints permanecen sin cambios.
 
-### Firma PDF como validación de tipo real
+## Reglas y decisiones técnicas
 
-Se exige:
+### Validación PDF
+
+Se exigen simultáneamente:
 
 - extensión `.pdf`;
 - MIME declarado `application/pdf`;
-- firma `%PDF-` en los primeros 1,024 bytes.
+- firma `%PDF-` en los primeros 1,024 bytes;
+- contenido no vacío;
+- tamaño máximo configurable.
 
-La firma comprueba el tipo binario sin interpretar el contenido. No garantiza que toda la estructura sea válida y no reemplaza antivirus ni un parser PDF, que permanecen fuera del alcance.
+La firma verifica el tipo binario sin interpretar ni extraer contenido. No sustituye antivirus ni validación estructural profunda.
 
-### Parser multipart en el límite HTTP
+### Licitaciones que aceptan documentos
 
-La API usa el parser MIME de la biblioteca estándar para mantener los objetos HTTP dentro de la capa API. Application recibe bytes y DTOs puros. El contrato multipart se declara manualmente en OpenAPI para conservar compatibilidad con Swagger.
-
-El cuerpo se limita antes de parsearse a:
-
-```text
-maximum_file_size × maximum_files + 1 MiB de overhead
-```
-
-### Carga múltiple atómica en metadatos
-
-Todos los archivos se validan antes de escribir. Si una escritura o persistencia falla:
-
-- la transacción SQL se revierte;
-- los archivos nuevos se eliminan mediante compensación.
-
-Esto evita metadatos sin archivo y reduce archivos huérfanos.
-
-### Duplicados incluyen documentos eliminados
-
-La restricción única `(tender_id, file_hash)` se conserva incluso después de soft delete. Esto evita reintroducir el mismo documento con otro nombre y mantiene una historia de auditoría coherente.
-
-### Soft delete conserva el archivo
-
-`DeleteTenderDocument` cambia el estado a `deleted` y registra `deleted_at`. El documento deja de listarse, consultarse y descargarse, pero el archivo permanece privado.
-
-Justificación:
-
-- trazabilidad;
-- posible recuperación administrativa;
-- preservación de evidencia;
-- ausencia todavía de una política aprobada de retención.
-
-La eliminación física debe incorporarse con reglas de retención, permisos administrativos y auditoría específica.
-
-### Estados mínimos
-
-El dominio expone únicamente:
-
-- `uploaded`;
-- `rejected`;
-- `deleted`.
-
-Los estados de extracción, OCR o procesamiento fueron retirados del enum activo y de la restricción de base de datos.
-
-### Estados de licitación que aceptan documentos
-
-Se permiten cargas solo en:
+Solo aceptan cargas:
 
 - `draft`;
 - `documents_pending`.
 
-Además de bloquear licitaciones archivadas y cerradas, se bloquean `cancelled`, `documents_processing` y `catalog_review`. La justificación es mantener inmutable la evidencia cuando el flujo ya avanzó a procesamiento o revisión.
+Se bloquean licitaciones archivadas, cerradas, canceladas o que ya avanzaron a procesamiento o revisión. Esto mantiene inmutable la evidencia una vez iniciado el flujo posterior.
 
-### Memoria y streaming
+### Duplicados
 
-En esta iteración, cada archivo validado se representa como bytes en memoria. El impacto se controla mediante límites de tamaño, cantidad y cuerpo multipart. La carga verdaderamente streaming es una mejora recomendada antes de elevar esos límites.
+La combinación `(tender_id, file_hash)` sigue siendo única incluso después de soft delete. Así no se puede reintroducir el mismo archivo con otro nombre y se conserva una historia de auditoría coherente.
 
-### Preparación para antivirus
+### Eliminación lógica
 
-`FileThreatScanner` es un puerto sin adaptador conectado. `UploadTenderDocument` acepta opcionalmente esa dependencia y la invoca después de validar el tipo y antes de escribir. No existe motor antivirus en esta iteración.
+`DeleteTenderDocument` cambia el estado a `deleted` y registra `deleted_at`. El documento deja de listarse, consultarse y descargarse, pero el archivo físico permanece privado.
+
+Se conserva porque todavía no existe una política aprobada de retención, recuperación administrativa y purga física. La eliminación definitiva debe añadirse con autorización y auditoría específicas.
+
+### Carga múltiple y compensación
+
+Todos los archivos se validan antes de escribir. Si una escritura o persistencia falla:
+
+- la transacción SQL se revierte;
+- los archivos recién almacenados se eliminan mediante compensación.
+
+Esto reduce metadatos sin archivo y archivos huérfanos.
+
+### Memoria
+
+Los archivos se mantienen como bytes en memoria durante esta iteración. El riesgo queda limitado por tamaño, cantidad y límite total del cuerpo multipart. La carga y descarga streaming es una mejora recomendada antes de aumentar esos límites.
+
+### Antivirus futuro
+
+`FileThreatScanner` define el punto de extensión. `UploadTenderDocument` puede invocarlo después de la validación de tipo y antes del almacenamiento. No existe un motor antivirus conectado en esta iteración.
 
 ## Persistencia
 
-La tabla `tender_documents` conserva:
+La migración `d914a6b4f2c1`:
+
+- agrega `deleted_at`;
+- restringe estados a `uploaded`, `deleted` y `rejected`;
+- crea un índice para `deleted_at`;
+- conserva la unicidad del hash por licitación;
+- soporta upgrade y downgrade en PostgreSQL y SQLite de pruebas.
+
+Metadatos conservados:
 
 - nombre original;
 - clave privada de almacenamiento;
@@ -259,57 +225,48 @@ La tabla `tender_documents` conserva:
 - estado;
 - fechas de carga, actualización y eliminación.
 
-La migración `d914a6b4f2c1`:
-
-- agrega `deleted_at`;
-- restringe estados a `uploaded`, `deleted` y `rejected`;
-- crea índice para `deleted_at`;
-- conserva la unicidad del hash dentro de la licitación;
-- soporta upgrade y downgrade en SQLite y PostgreSQL.
-
 ## Auditoría
 
-| Evento | Aggregate | Payload mínimo |
+| Evento | Agregado | Datos mínimos |
 |---|---|---|
 | `DocumentUploaded` | documento | licitación, usuario y hash |
 | `DocumentDeleted` | documento | licitación, usuario y hash |
 | `DuplicateDocumentDetected` | licitación | usuario, hash y nombre original |
 
-La detección de duplicado se confirma antes de devolver `409`, aunque la carga principal no se realice.
+La detección de duplicado se confirma antes de devolver `409`, aunque la carga principal no se ejecute.
 
 ## Seguridad
 
 - almacenamiento fuera de rutas públicas;
 - UUID como nombre físico;
 - nombre original limitado a 255 caracteres;
-- rechazo de `/`, `\\`, `..` y caracteres de control;
-- claves relativas POSIX;
-- comprobación de confinamiento dentro de la raíz;
-- límite por archivo, cantidad y cuerpo multipart;
-- extensión, MIME y magic bytes;
-- respuesta de descarga con `nosniff`;
-- rutas físicas no expuestas por DTOs o API;
-- usuario obligatorio para cargar y eliminar.
+- rechazo de `/`, `\`, `..` y caracteres de control;
+- claves relativas y confinadas en la raíz privada;
+- límites por archivo, cantidad y cuerpo multipart;
+- extensión, MIME y firma binaria;
+- `Content-Disposition: attachment` y `X-Content-Type-Options: nosniff`;
+- rutas físicas y storage keys ausentes en respuestas API;
+- usuario obligatorio para carga y eliminación.
 
 ## Resultado local
 
 - Pytest: `46 passed`.
 - Cobertura total: `95%`.
 - Compilación: `python -m compileall app tests alembic` aprobada.
-- Migraciones SQLite: upgrade y teardown/downgrade aprobados durante las pruebas.
+- Contrato OpenAPI, incluida la carga multipart: aprobado.
+- Migraciones SQLite de pruebas: upgrade y teardown/downgrade aprobados.
 
-La validación definitiva de Ruff, PostgreSQL 16, migraciones, OpenAPI y Docker se ejecuta mediante GitHub Actions.
+GitHub Actions valida adicionalmente Ruff, PostgreSQL 16, ciclo de migraciones, cobertura, OpenAPI y build Docker.
 
 ## Mejoras posibles para la Iteración 5
 
-- autenticación para eliminar IDs de usuario suministrados manualmente;
-- autorización por licitación y documento;
+- autenticación y autorización por licitación y documento;
 - carga y descarga streaming;
 - antivirus mediante `FileThreatScanner`;
 - política de retención y purga física;
-- reconciliación periódica de archivos huérfanos;
+- reconciliación de archivos huérfanos;
 - control de concurrencia para duplicados simultáneos;
 - adaptadores MinIO o S3;
-- cifrado administrado de archivos y claves;
+- cifrado administrado y rotación de claves;
 - cuotas por usuario o licitación;
-- posteriormente, y solo con aprobación, iniciar extracción de texto como módulo independiente.
+- posteriormente, y solo con aprobación, extracción de texto como módulo independiente.
