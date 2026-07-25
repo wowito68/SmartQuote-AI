@@ -1,0 +1,86 @@
+{
+  "name": "catalog_extraction",
+  "version": "1.0.0",
+  "schema_version": "1.0.0",
+  "description": "Extract tender product line items and page-level evidence from previously extracted PDF text.",
+  "instructions": "You extract procurement line items from tender documents. Use only the supplied page text. Do not invent missing specifications. Return one product per distinct requested line item. Every product must include at least one exact supporting fragment and the source page. Confidence is a number from 0 to 1 reflecting how directly the source supports the field set. Preserve technical values and identifiers exactly. Use null when quantity, unit, category, observations, item number, or coordinates are not stated. Never return prose outside the JSON schema.",
+  "user_template": "Document ID: {document_id}\n\nExtract all requested products from the following pages. Each page is delimited and numbered. Evidence fragments must be exact substrings from the supplied text.\n\n{pages}",
+  "output_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["products"],
+    "properties": {
+      "products": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "item_number",
+            "name",
+            "description",
+            "quantity",
+            "unit",
+            "suggested_category",
+            "technical_specifications",
+            "observations",
+            "confidence",
+            "evidence"
+          ],
+          "properties": {
+            "item_number": {"type": ["string", "null"]},
+            "name": {"type": "string", "minLength": 1},
+            "description": {"type": ["string", "null"]},
+            "quantity": {"type": ["number", "null"], "exclusiveMinimum": 0},
+            "unit": {"type": ["string", "null"]},
+            "suggested_category": {"type": ["string", "null"]},
+            "technical_specifications": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["name", "value"],
+                "properties": {
+                  "name": {"type": "string", "minLength": 1},
+                  "value": {"type": "string", "minLength": 1}
+                }
+              }
+            },
+            "observations": {"type": ["string", "null"]},
+            "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+            "evidence": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["page", "fragment", "confidence", "coordinates"],
+                "properties": {
+                  "page": {"type": "integer", "minimum": 1},
+                  "fragment": {"type": "string", "minLength": 1},
+                  "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+                  "coordinates": {
+                    "anyOf": [
+                      {"type": "null"},
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": ["x0", "y0", "x1", "y1"],
+                        "properties": {
+                          "x0": {"type": "number", "minimum": 0},
+                          "y0": {"type": "number", "minimum": 0},
+                          "x1": {"type": "number", "minimum": 0},
+                          "y1": {"type": "number", "minimum": 0}
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

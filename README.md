@@ -235,3 +235,77 @@ La suite incluye PDFs reales pequeños en `tests/fixtures/` y pruebas de:
 - `docs/iteration-4-document-management.md`
 - `docs/iteration-5-text-extraction-pipeline.md`
 - `docs/continuous-integration.md`
+
+## Iteración 6: extracción inteligente de catálogo
+
+La Iteración 6 consume únicamente documentos `ready_for_ai` y crea un catálogo sugerido por IA. La respuesta no modifica directamente el dominio: primero se valida con JSON Schema estricto y Pydantic, después se normaliza con reglas determinísticas y finalmente queda en `pending_review`.
+
+### Servicios y configuración
+
+El worker Celery escucha dos colas:
+
+```text
+document-processing
+ai-extraction
+```
+
+Variables principales:
+
+```text
+SMARTQUOTE_OPENAI_API_KEY
+SMARTQUOTE_OPENAI_BASE_URL=https://api.openai.com/v1
+SMARTQUOTE_OPENAI_TIMEOUT_SECONDS=90
+SMARTQUOTE_AI_MODEL=gpt-5-mini
+SMARTQUOTE_AI_PROMPT_VERSION=1.0.0
+SMARTQUOTE_AI_TEMPERATURE=0
+SMARTQUOTE_AI_INPUT_COST_PER_MILLION_TOKENS=0
+SMARTQUOTE_AI_OUTPUT_COST_PER_MILLION_TOKENS=0
+```
+
+Los precios deben configurarse con la tarifa vigente del modelo contratado.
+
+### Endpoints
+
+| Método | Ruta | Función |
+|---|---|---|
+| `POST` | `/api/v1/tenders/{id}/catalog/extract` | Crea o reutiliza runs y encola extracción |
+| `GET` | `/api/v1/tenders/{id}/catalog` | Catálogo, estados y métricas |
+| `GET` | `/api/v1/catalog/{product_id}` | Producto, payload original y evidencia |
+| `PUT` | `/api/v1/catalog/{product_id}` | Editar, aprobar o rechazar |
+| `POST` | `/api/v1/tenders/{id}/catalog/approve` | Snapshot inmutable aprobado |
+
+Ejemplo:
+
+```bash
+curl -X POST http://localhost:8000/api/v1/tenders/TENDER_ID/catalog/extract
+
+curl http://localhost:8000/api/v1/tenders/TENDER_ID/catalog
+
+curl -X PUT http://localhost:8000/api/v1/catalog/PRODUCT_ID \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "action": "edit",
+    "reviewer_user_id": "00000000-0000-0000-0000-000000000001",
+    "quantity": 2500,
+    "unit": "m"
+  }'
+
+curl -X PUT http://localhost:8000/api/v1/catalog/PRODUCT_ID \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "action": "approve",
+    "reviewer_user_id": "00000000-0000-0000-0000-000000000001"
+  }'
+
+curl -X POST http://localhost:8000/api/v1/tenders/TENDER_ID/catalog/approve \
+  -H 'Content-Type: application/json' \
+  -d '{"approved_by_user_id":"00000000-0000-0000-0000-000000000001"}'
+```
+
+### Prompts y trazabilidad
+
+El prompt activo está versionado en `backend/app/prompts/catalog_extraction/v1/prompt.json`. La clave idempotente incluye hash del PDF, versión del prompt, modelo y hash del schema. Cada producto conserva el JSON original, página, fragmento, confianza, modelo y prompt; las ediciones humanas se guardan como revisiones separadas.
+
+La explicación técnica completa está en `docs/ai-extraction.md`.
+
+Fuera de alcance: proveedores, RFQs, recepción de correo y análisis de cotizaciones.
