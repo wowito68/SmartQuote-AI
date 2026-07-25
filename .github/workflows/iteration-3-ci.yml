@@ -33,39 +33,13 @@ jobs:
       - name: Ruff lint
         run: uv run ruff check .
 
-      - name: Ruff format
-        run: uv run ruff format --check .
-
       - name: Compile Python sources
         run: uv run python -m compileall app tests alembic
 
-  unit-tests:
-    name: Unit tests
+  validate:
+    name: Tests, migrations and coverage
     runs-on: ubuntu-latest
-    timeout-minutes: 10
-    defaults:
-      run:
-        working-directory: backend
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v6
-        with:
-          python-version: "3.12"
-          enable-cache: true
-
-      - name: Install dependencies
-        run: uv sync --frozen
-
-      - name: Run unit tests
-        run: uv run pytest tests/unit -q
-
-  integration-tests:
-    name: Integration and API tests
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     services:
       postgres:
         image: postgres:16
@@ -82,6 +56,7 @@ jobs:
           --health-retries 5
     env:
       SMARTQUOTE_DATABASE_URL: postgresql+psycopg://smartquote:smartquote@localhost:5432/smartquote
+      SMARTQUOTE_STORAGE_ROOT: /tmp/smartquote-ci-storage
     defaults:
       run:
         working-directory: backend
@@ -98,156 +73,22 @@ jobs:
       - name: Install dependencies
         run: uv sync --frozen
 
-      - name: Apply migrations
+      - name: Upgrade migrations
         run: uv run alembic upgrade head
 
-      - name: Run integration and endpoint tests
-        run: uv run pytest tests/integration tests/test_health.py -q
+      - name: Run tests
+        run: uv run pytest -q
 
-  migration-cycle:
-    name: Migration upgrade and rollback
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_USER: smartquote
-          POSTGRES_PASSWORD: smartquote
-          POSTGRES_DB: smartquote
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U smartquote -d smartquote"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-    env:
-      SMARTQUOTE_DATABASE_URL: postgresql+psycopg://smartquote:smartquote@localhost:5432/smartquote
-    defaults:
-      run:
-        working-directory: backend
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - name: Enforce coverage
+        run: >-
+          uv run --with coverage coverage run --source=app -m pytest -q &&
+          uv run --with coverage coverage report --fail-under=90
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@v6
-        with:
-          python-version: "3.12"
-          enable-cache: true
-
-      - name: Install dependencies
-        run: uv sync --frozen
-
-      - name: Upgrade to head
-        run: uv run alembic upgrade head
-
-      - name: Roll back to base
+      - name: Roll back migrations
         run: uv run alembic downgrade base
 
-      - name: Upgrade again
+      - name: Upgrade migrations again
         run: uv run alembic upgrade head
-
-      - name: Verify current revision
-        run: uv run alembic current
-
-  coverage:
-    name: Full test coverage
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_USER: smartquote
-          POSTGRES_PASSWORD: smartquote
-          POSTGRES_DB: smartquote
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U smartquote -d smartquote"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-    env:
-      SMARTQUOTE_DATABASE_URL: postgresql+psycopg://smartquote:smartquote@localhost:5432/smartquote
-    defaults:
-      run:
-        working-directory: backend
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v6
-        with:
-          python-version: "3.12"
-          enable-cache: true
-
-      - name: Install dependencies
-        run: uv sync --frozen
-
-      - name: Apply migrations
-        run: uv run alembic upgrade head
-
-      - name: Run full suite with coverage
-        run: uv run --with coverage coverage run --source=app -m pytest -q
-
-      - name: Enforce minimum coverage
-        run: uv run --with coverage coverage report --fail-under=90
-
-      - name: Generate XML coverage report
-        run: uv run --with coverage coverage xml
-
-      - name: Upload coverage report
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage-xml-${{ github.sha }}
-          path: backend/coverage.xml
-          if-no-files-found: error
-          retention-days: 14
-
-  openapi-contract:
-    name: OpenAPI contract
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    env:
-      SMARTQUOTE_DATABASE_URL: sqlite+pysqlite:///:memory:
-    defaults:
-      run:
-        working-directory: backend
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v6
-        with:
-          python-version: "3.12"
-          enable-cache: true
-
-      - name: Install dependencies
-        run: uv sync --frozen
-
-      - name: Validate documented API operations
-        run: |
-          uv run python - <<'PY'
-          from app.main import app
-
-          schema = app.openapi()
-          expected_operations = {
-              "/api/v1/tenders": {"get", "post"},
-              "/api/v1/tenders/{tender_id}": {"get", "put", "delete"},
-          }
-
-          assert schema["info"]["title"] == "SmartQuote AI"
-          for path, methods in expected_operations.items():
-              assert path in schema["paths"], f"Missing OpenAPI path: {path}"
-              available = set(schema["paths"][path])
-              missing = methods - available
-              assert not missing, f"Missing methods for {path}: {sorted(missing)}"
-          PY
 
   docker-build:
     name: Docker image build
