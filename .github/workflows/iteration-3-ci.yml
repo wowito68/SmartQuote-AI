@@ -1,47 +1,231 @@
-name: Materialize Iteration 6
+name: SmartQuote CI
 
 on:
+  push:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  materialize:
-    if: >-
-      github.event.pull_request.head.ref == 'agent/iteration-6-ai-product-extraction' &&
-      github.actor != 'github-actions[bot]'
+  quality:
+    name: Code quality
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: backend
     steps:
-      - name: Checkout implementation branch
-        uses: actions/checkout@v4
-        with:
-          ref: agent/iteration-6-ai-product-extraction
-          fetch-depth: 0
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v6
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
         with:
           python-version: "3.12"
+          enable-cache: true
+      - name: Install locked dependencies
+        run: uv sync --frozen
+      - name: Ruff lint
+        run: uv run ruff check .
+      - name: Compile Python sources
+        run: uv run python -m compileall app tests alembic
 
-      - name: Reconstruct and verify implementation
-        shell: bash
-        run: |
-          set -euo pipefail
-          cat .iteration6/chunk-* | base64 --decode > /tmp/iteration6.tar.gz
-          echo "a066d6941aec5ad90df76dae5a2f5f21f6495dc371ff584cc0c8c3ba030f2150  /tmp/iteration6.tar.gz" | sha256sum --check
-          tar --extract --gzip --file /tmp/iteration6.tar.gz
-          cd backend
-          uv lock
+  unit-tests:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      SMARTQUOTE_DATABASE_URL: "sqlite+pysqlite:////tmp/smartquote-unit.db"
+      SMARTQUOTE_STORAGE_ROOT: /tmp/smartquote-unit-storage
+      SMARTQUOTE_CELERY_BROKER_URL: memory://
+      SMARTQUOTE_CELERY_RESULT_BACKEND: cache+memory://
+      SMARTQUOTE_CELERY_TASK_ALWAYS_EAGER: "true"
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+          enable-cache: true
+      - run: uv sync --frozen
+      - run: uv run pytest tests/unit -q
 
-      - name: Commit implementation
-        shell: bash
+  integration-tests:
+    name: Integration, API and Celery tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: smartquote
+          POSTGRES_PASSWORD: smartquote
+          POSTGRES_DB: smartquote
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U smartquote -d smartquote"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      SMARTQUOTE_DATABASE_URL: postgresql+psycopg://smartquote:smartquote@localhost:5432/smartquote
+      SMARTQUOTE_STORAGE_ROOT: /tmp/smartquote-integration-storage
+      SMARTQUOTE_CELERY_BROKER_URL: redis://localhost:6379/0
+      SMARTQUOTE_CELERY_RESULT_BACKEND: redis://localhost:6379/1
+      SMARTQUOTE_CELERY_TASK_ALWAYS_EAGER: "false"
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+          enable-cache: true
+      - run: uv sync --frozen
+      - run: uv run alembic upgrade head
+      - run: uv run pytest tests/integration tests/test_health.py -q
+
+  migration-cycle:
+    name: Migration upgrade and rollback
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: smartquote
+          POSTGRES_PASSWORD: smartquote
+          POSTGRES_DB: smartquote
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U smartquote -d smartquote"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      SMARTQUOTE_DATABASE_URL: postgresql+psycopg://smartquote:smartquote@localhost:5432/smartquote
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+          enable-cache: true
+      - run: uv sync --frozen
+      - run: uv run alembic upgrade head
+      - run: uv run alembic downgrade base
+      - run: uv run alembic upgrade head
+      - run: uv run alembic current
+
+  coverage:
+    name: Full test coverage
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: smartquote
+          POSTGRES_PASSWORD: smartquote
+          POSTGRES_DB: smartquote
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U smartquote -d smartquote"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      SMARTQUOTE_DATABASE_URL: postgresql+psycopg://smartquote:smartquote@localhost:5432/smartquote
+      SMARTQUOTE_STORAGE_ROOT: /tmp/smartquote-coverage-storage
+      SMARTQUOTE_CELERY_BROKER_URL: redis://localhost:6379/0
+      SMARTQUOTE_CELERY_RESULT_BACKEND: redis://localhost:6379/1
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+          enable-cache: true
+      - run: uv sync --frozen
+      - run: uv run alembic upgrade head
+      - run: uv run --with coverage coverage run --source=app -m pytest -q
+      - run: uv run --with coverage coverage report --fail-under=90
+      - run: uv run --with coverage coverage xml
+      - uses: actions/upload-artifact@v4
+        with:
+          name: coverage-xml-${{ github.sha }}
+          path: backend/coverage.xml
+          if-no-files-found: error
+          retention-days: 14
+
+  openapi-contract:
+    name: OpenAPI contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      SMARTQUOTE_DATABASE_URL: "sqlite+pysqlite:///:memory:"
+      SMARTQUOTE_STORAGE_ROOT: /tmp/smartquote-openapi-storage
+      SMARTQUOTE_CELERY_BROKER_URL: memory://
+      SMARTQUOTE_CELERY_RESULT_BACKEND: cache+memory://
+      SMARTQUOTE_CELERY_TASK_ALWAYS_EAGER: "true"
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+          enable-cache: true
+      - run: uv sync --frozen
+      - name: Validate API operations
         run: |
-          set -euo pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add --all
-          git commit -m "Materialize Iteration 6 implementation"
-          git push origin HEAD:agent/iteration-6-ai-product-extraction
+          uv run python - <<'PY'
+          from app.main import app
+          schema = app.openapi()
+          expected = {
+              "/api/v1/documents/{document_id}/status": {"get"},
+              "/api/v1/documents/{document_id}/pages": {"get"},
+              "/api/v1/documents/{document_id}/quality": {"get"},
+              "/api/v1/documents/{document_id}/extraction": {"get"},
+              "/api/v1/tenders/{tender_id}/catalog/extract": {"post"},
+              "/api/v1/tenders/{tender_id}/catalog": {"get"},
+              "/api/v1/catalog/{product_id}": {"get", "put"},
+              "/api/v1/tenders/{tender_id}/catalog/approve": {"post"},
+          }
+          for path, methods in expected.items():
+              assert path in schema["paths"]
+              assert methods <= set(schema["paths"][path])
+          assert "post" not in schema["paths"]["/api/v1/documents/{document_id}/status"]
+          PY
+
+  docker-build:
+    name: Docker image build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build --tag smartquote-ai:${{ github.sha }} backend
