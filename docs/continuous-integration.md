@@ -16,6 +16,6 @@ El workflow `.github/workflows/iteration-3-ci.yml` conserva su ruta histórica y
 6. **OpenAPI contract**: confirma rutas de licitaciones, documentos, descarga y contrato multipart.
 7. **Docker image build**: valida que la imagen del backend pueda construirse con el lockfile aprobado.
 
-Los trabajos de integración usan directorios temporales privados para los documentos y eliminan los datos mediante fixtures de prueba.
+El archivo YAML se valida sintácticamente antes de publicarse. Los trabajos de integración usan directorios temporales privados para los documentos y eliminan los datos mediante fixtures de prueba.
 
 Un commit local comienza a validarse cuando se publica mediante `push` o forma parte de una actualización de pull request.
