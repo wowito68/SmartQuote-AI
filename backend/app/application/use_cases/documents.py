@@ -1,3 +1,4 @@
+import logging
 from contextlib import suppress
 from uuid import UUID, uuid4
 
@@ -8,6 +9,7 @@ from app.application.dtos.document import (
     UploadTenderDocumentRequest,
 )
 from app.application.exceptions import TenderNotFound
+from app.application.ports.document_processing_queue import DocumentProcessingQueue
 from app.application.ports.file_storage import FileStorage
 from app.application.ports.file_threat_scanner import FileThreatScanner
 from app.application.ports.unit_of_work import UnitOfWorkFactory
@@ -17,6 +19,7 @@ from app.domain.documents.events import (
     DocumentDeleted,
     DocumentUploaded,
     DuplicateDocumentDetected,
+    document_queued,
 )
 from app.domain.documents.exceptions import (
     DocumentAlreadyDeleted,
@@ -25,6 +28,8 @@ from app.domain.documents.exceptions import (
     DuplicateDocument,
 )
 from app.domain.tenders.value_objects import TenderStatus
+
+logger = logging.getLogger(__name__)
 
 
 class UploadTenderDocument:
@@ -36,10 +41,12 @@ class UploadTenderDocument:
         maximum_size_bytes: int,
         maximum_files_per_upload: int,
         file_threat_scanner: FileThreatScanner | None = None,
+        processing_queue: DocumentProcessingQueue | None = None,
     ) -> None:
         self._uow_factory = uow_factory
         self._file_storage = file_storage
         self._file_threat_scanner = file_threat_scanner
+        self._processing_queue = processing_queue
         self._validator = DocumentFileValidator(
             maximum_size_bytes=maximum_size_bytes,
             maximum_files_per_upload=maximum_files_per_upload,
@@ -86,6 +93,7 @@ class UploadTenderDocument:
                 seen_hashes.add(file.file_hash.value)
 
             created_documents: list[TenderDocument] = []
+            created_responses: list[TenderDocumentResponse] = []
             try:
                 for file in validated_files:
                     document_id = uuid4()
@@ -106,7 +114,6 @@ class UploadTenderDocument:
                         uploaded_by_user_id=request.uploaded_by_user_id,
                     )
                     created = uow.documents.create(document)
-                    created_documents.append(created)
                     uow.audit_events.append(
                         DocumentUploaded(
                             document_id=created.id,
@@ -115,6 +122,14 @@ class UploadTenderDocument:
                             file_hash=created.file_hash.value,
                         )
                     )
+                    created_responses.append(TenderDocumentResponse.from_entity(created))
+                    if self._processing_queue is not None:
+                        created.mark_queued()
+                        created = uow.documents.update(created)
+                        uow.audit_events.append(
+                            document_queued(created.id, file_hash=created.file_hash.value)
+                        )
+                    created_documents.append(created)
 
                 if tender.status is TenderStatus.DRAFT:
                     tender.change_status(TenderStatus.DOCUMENTS_PENDING)
@@ -127,7 +142,17 @@ class UploadTenderDocument:
                         self._file_storage.delete(storage_key)
                 raise
 
-        items = tuple(TenderDocumentResponse.from_entity(item) for item in created_documents)
+        if self._processing_queue is not None:
+            for document in created_documents:
+                try:
+                    self._processing_queue.enqueue(document.id)
+                except Exception:
+                    logger.exception(
+                        "document_queue_publish_failed",
+                        extra={"document_id": str(document.id)},
+                    )
+
+        items = tuple(created_responses)
         return TenderDocumentListResponse(items=items, total=len(items))
 
 

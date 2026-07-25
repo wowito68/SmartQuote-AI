@@ -4,7 +4,14 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Request, Response, status
 
-from app.api.dependencies import get_file_storage, get_uow_factory
+from app.api.dependencies import get_file_storage, get_processing_queue, get_uow_factory
+from app.api.document_processing_schemas import (
+    DocumentPageListResponseSchema,
+    DocumentPageResponseSchema,
+    DocumentQualityResponseSchema,
+    DocumentStatusResponseSchema,
+    ExtractionRunResponseSchema,
+)
 from app.api.document_schemas import (
     TenderDocumentListResponseSchema,
     TenderDocumentResponseSchema,
@@ -15,8 +22,15 @@ from app.application.dtos.document import (
     TenderDocumentListResponse,
     UploadTenderDocumentRequest,
 )
+from app.application.ports.document_processing_queue import DocumentProcessingQueue
 from app.application.ports.file_storage import FileStorage
 from app.application.ports.unit_of_work import UnitOfWorkFactory
+from app.application.use_cases.document_processing import (
+    GetDocumentExtraction,
+    GetDocumentProcessingStatus,
+    GetDocumentQuality,
+    ListDocumentPages,
+)
 from app.application.use_cases.documents import (
     DeleteTenderDocument,
     DownloadTenderDocument,
@@ -29,9 +43,10 @@ from app.config.settings import Settings, get_settings
 router = APIRouter(tags=["documents"])
 UowFactoryDependency = Annotated[UnitOfWorkFactory, Depends(get_uow_factory)]
 FileStorageDependency = Annotated[FileStorage, Depends(get_file_storage)]
+ProcessingQueueDependency = Annotated[DocumentProcessingQueue, Depends(get_processing_queue)]
 SettingsDependency = Annotated[Settings, Depends(get_settings)]
 ERROR_RESPONSES = {
-    404: {"model": ErrorResponseSchema, "description": "Tender or document not found"},
+    404: {"model": ErrorResponseSchema, "description": "Tender, document or evidence not found"},
     409: {"model": ErrorResponseSchema, "description": "Duplicate or invalid state"},
     413: {"model": ErrorResponseSchema, "description": "File exceeds configured limit"},
     422: {"model": ErrorResponseSchema, "description": "Invalid document upload"},
@@ -39,9 +54,7 @@ ERROR_RESPONSES = {
 }
 
 
-def _list_response(
-    result: TenderDocumentListResponse,
-) -> TenderDocumentListResponseSchema:
+def _list_response(result: TenderDocumentListResponse) -> TenderDocumentListResponseSchema:
     return TenderDocumentListResponseSchema(
         items=[TenderDocumentResponseSchema.model_validate(item) for item in result.items],
         total=result.total,
@@ -52,7 +65,7 @@ def _list_response(
     "/tenders/{tender_id}/documents",
     response_model=TenderDocumentListResponseSchema,
     status_code=status.HTTP_201_CREATED,
-    summary="Upload one or more PDF documents",
+    summary="Upload one or more PDF documents and queue processing",
     responses=ERROR_RESPONSES,
     openapi_extra={
         "requestBody": {
@@ -80,6 +93,7 @@ async def upload_tender_documents(
     request: Request,
     uow_factory: UowFactoryDependency,
     file_storage: FileStorageDependency,
+    processing_queue: ProcessingQueueDependency,
     settings: SettingsDependency,
 ) -> TenderDocumentListResponseSchema:
     uploaded_by_user_id, uploads = await parse_document_upload(
@@ -92,6 +106,7 @@ async def upload_tender_documents(
         file_storage,
         maximum_size_bytes=settings.max_document_size_bytes,
         maximum_files_per_upload=settings.max_documents_per_upload,
+        processing_queue=processing_queue,
     ).execute(
         tender_id,
         UploadTenderDocumentRequest(
@@ -127,6 +142,65 @@ def get_tender_document(
 ) -> TenderDocumentResponseSchema:
     result = GetTenderDocument(uow_factory).execute(document_id)
     return TenderDocumentResponseSchema.model_validate(result)
+
+
+@router.get(
+    "/documents/{document_id}/status",
+    response_model=DocumentStatusResponseSchema,
+    summary="Get document processing status",
+    responses={404: ERROR_RESPONSES[404]},
+)
+def get_document_status(
+    document_id: UUID,
+    uow_factory: UowFactoryDependency,
+) -> DocumentStatusResponseSchema:
+    result = GetDocumentProcessingStatus(uow_factory).execute(document_id)
+    return DocumentStatusResponseSchema.model_validate(result)
+
+
+@router.get(
+    "/documents/{document_id}/pages",
+    response_model=DocumentPageListResponseSchema,
+    summary="List extracted document pages",
+    responses={404: ERROR_RESPONSES[404]},
+)
+def list_document_pages(
+    document_id: UUID,
+    uow_factory: UowFactoryDependency,
+) -> DocumentPageListResponseSchema:
+    result = ListDocumentPages(uow_factory).execute(document_id)
+    return DocumentPageListResponseSchema(
+        items=[DocumentPageResponseSchema.model_validate(item) for item in result.items],
+        total=result.total,
+    )
+
+
+@router.get(
+    "/documents/{document_id}/quality",
+    response_model=DocumentQualityResponseSchema,
+    summary="Get document quality evaluation",
+    responses={404: ERROR_RESPONSES[404]},
+)
+def get_document_quality(
+    document_id: UUID,
+    uow_factory: UowFactoryDependency,
+) -> DocumentQualityResponseSchema:
+    result = GetDocumentQuality(uow_factory).execute(document_id)
+    return DocumentQualityResponseSchema.model_validate(result)
+
+
+@router.get(
+    "/documents/{document_id}/extraction",
+    response_model=ExtractionRunResponseSchema,
+    summary="Get latest extraction run",
+    responses={404: ERROR_RESPONSES[404]},
+)
+def get_document_extraction(
+    document_id: UUID,
+    uow_factory: UowFactoryDependency,
+) -> ExtractionRunResponseSchema:
+    result = GetDocumentExtraction(uow_factory).execute(document_id)
+    return ExtractionRunResponseSchema.model_validate(result)
 
 
 @router.get(

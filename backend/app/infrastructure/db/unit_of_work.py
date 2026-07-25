@@ -6,6 +6,9 @@ from app.application.ports.unit_of_work import UnitOfWork
 from app.infrastructure.db.repositories.audit_event_repository import (
     SqlAlchemyAuditEventRepository,
 )
+from app.infrastructure.db.repositories.document_processing_repository import (
+    SqlAlchemyExtractionRepository,
+)
 from app.infrastructure.db.repositories.document_repository import (
     SqlAlchemyTenderDocumentRepository,
 )
@@ -23,6 +26,7 @@ class SqlAlchemyUnitOfWork(UnitOfWork):
         self._session = self._session_factory()
         self.tenders = SqlAlchemyTenderRepository(self._session)
         self.documents = SqlAlchemyTenderDocumentRepository(self._session)
+        self.extractions = SqlAlchemyExtractionRepository(self._session)
         self.audit_events = SqlAlchemyAuditEventRepository(self._session)
         self.users = SqlAlchemyUserLookup(self._session)
         return self

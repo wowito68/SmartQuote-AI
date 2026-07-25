@@ -1,321 +1,237 @@
 # SmartQuote AI
 
-Backend para administrar licitaciones y sus documentos privados con Clean Architecture.
+Backend para administrar licitaciones, almacenar documentos privados y extraer texto de PDFs mediante un pipeline asíncrono auditable.
 
 ## Alcance actual
 
-La Iteración 4 agrega recepción, validación, almacenamiento, consulta, descarga y eliminación lógica de documentos PDF asociados a licitaciones.
+La Iteración 5 agrega:
 
-Incluido:
+- Celery como motor de tareas;
+- Redis como broker y backend de resultados;
+- detección periódica de documentos pendientes;
+- extracción de texto por página;
+- PyMuPDF como extractor primario;
+- pdfplumber como fallback automático;
+- evaluación de calidad documental;
+- estados `queued`, `processing`, `text_extracted`, `ready_for_ai`, `needs_ocr` y `failed`;
+- persistencia de páginas, ejecuciones, configuración, errores y métricas;
+- endpoints de consulta para estado, páginas, calidad y extracción;
+- logs estructurados en JSON.
 
-- gestión CRUD y archivado de licitaciones;
-- carga de uno o varios PDFs mediante `multipart/form-data`;
-- validación de extensión, MIME declarado y firma binaria PDF;
-- límite configurable de tamaño y cantidad por solicitud;
-- hash SHA-256 y detección de duplicados por licitación;
-- almacenamiento privado local mediante `LocalFileStorage`;
-- metadatos persistidos en PostgreSQL;
-- descarga privada y soft delete;
-- auditoría de cargas, eliminaciones y duplicados.
+Fuera de alcance: OpenAI, OCR, extracción de productos, proveedores, RFQs y procesamiento síncrono.
 
-Fuera de alcance:
-
-- extracción de texto;
-- OCR;
-- PyMuPDF;
-- inteligencia artificial;
-- antivirus real;
-- tareas asíncronas;
-- almacenamiento S3 o MinIO.
-
-## Requisitos
-
-- Python 3.12
-- uv
-- PostgreSQL 16
-- Docker y Docker Compose, opcionales para desarrollo local
-
-## Configuración
-
-```bash
-cp .env.example .env
-```
-
-Variables documentales:
-
-| Variable | Valor predeterminado | Descripción |
-|---|---:|---|
-| `SMARTQUOTE_STORAGE_ROOT` | `storage/private` | Directorio privado de archivos |
-| `SMARTQUOTE_MAX_DOCUMENT_SIZE_BYTES` | `20971520` | Máximo por archivo, 20 MiB |
-| `SMARTQUOTE_MAX_DOCUMENTS_PER_UPLOAD` | `10` | Máximo de archivos por solicitud |
-
-El directorio de almacenamiento no debe exponerse mediante un servidor de archivos estáticos.
-
-## Instalación y ejecución
-
-```bash
-cd backend
-uv sync
-uv run alembic upgrade head
-uv run uvicorn app.main:app --reload
-```
-
-Con Docker Compose:
+## Servicios
 
 ```bash
 docker compose up --build
 ```
 
-Docker utiliza un volumen privado llamado `document_storage`, montado en `/app/storage/private`.
+El entorno inicia:
 
-Servicios:
+| Servicio | Función |
+|---|---|
+| `api` | FastAPI y carga de documentos |
+| `worker` | ejecución de etapas Celery |
+| `beat` | detección periódica de documentos pendientes |
+| `redis` | broker y backend Celery |
+| `postgres` | metadatos, páginas, métricas y auditoría |
 
-- API: `http://localhost:8000`
-- Swagger/OpenAPI: `http://localhost:8000/docs`
-- ReDoc: `http://localhost:8000/redoc`
-- Health check: `http://localhost:8000/health`
+Aplicar migraciones:
 
-## Usuario técnico inicial
+```bash
+docker compose run --rm api uv run alembic upgrade head
+```
 
-Mientras no exista autenticación, la migración registra este usuario para probar los flujos:
+Swagger: `http://localhost:8000/docs`
+
+## Pipeline documental
+
+```mermaid
+flowchart LR
+    A[DocumentUploaded] --> B[DocumentValidation]
+    B --> C[TextExtraction]
+    C --> D[QualityEvaluation]
+    D -->|calidad suficiente| E[ReadyForAI]
+    D -->|texto insuficiente| F[NeedsOCR]
+    B -->|error| G[Failed]
+    C -->|error| G
+    D -->|error| G
+```
+
+Las etapas se implementan como tareas Celery independientes:
+
+- `smartquote.documents.validate`
+- `smartquote.documents.extract_text`
+- `smartquote.documents.evaluate_quality`
+- `smartquote.documents.finalize`
+
+La carga publica `smartquote.documents.start_pipeline`. El worker orquesta las etapas sin ejecutarlas en el proceso HTTP. Cada etapa también está registrada como tarea Celery independiente. Celery Beat ejecuta `smartquote.documents.detect_pending` para recuperar documentos `uploaded` o `queued` que no hayan sido consumidos.
+
+## Flujo completo
+
+1. `POST /api/v1/tenders/{id}/documents` valida y almacena el PDF privado.
+2. Se registra `DocumentUploaded`.
+3. El documento cambia de `uploaded` a `queued` y se registra `DocumentQueued`.
+4. Después del commit SQL se publica la tarea en Redis.
+5. El worker valida nuevamente firma y SHA-256 del archivo almacenado.
+6. El documento pasa a `processing`.
+7. PyMuPDF extrae texto página por página mediante `Page.get_text("text", sort=True)`.
+8. Si falla o la extracción es insuficiente, se ejecuta pdfplumber.
+9. Se persisten `ExtractionRun` y cada `DocumentPage`.
+10. El documento pasa a `text_extracted`.
+11. `DocumentQualityEvaluator` calcula métricas.
+12. El documento termina en `ready_for_ai` o `needs_ocr`.
+13. Los errores dejan evidencia en `ExtractionRun` y cambian el documento a `failed`.
+
+## Persistencia
+
+### `extraction_runs`
+
+Conserva:
+
+- extractor final y versión;
+- configuración canónica;
+- clave de idempotencia;
+- inicio, final y duración;
+- páginas y caracteres extraídos;
+- resultado y errores;
+- referencia a ejecución reutilizada cuando aplique.
+
+### `document_pages`
+
+Cada página conserva:
+
+- número;
+- texto;
+- dimensiones;
+- caracteres y palabras;
+- indicador de página vacía;
+- densidad aproximada;
+- duración de extracción.
+
+### `document_qualities`
+
+Conserva:
+
+- páginas procesadas y vacías;
+- porcentaje de páginas sin texto;
+- caracteres extraídos;
+- densidad agregada;
+- calidad estimada;
+- decisión;
+- indicador de revisión manual.
+
+## Extractores
+
+`DocumentTextExtractor` desacopla Application de las bibliotecas PDF.
 
 ```text
-ID: 00000000-0000-0000-0000-000000000001
-Email: system@smartquote.local
+DocumentTextExtractor
+├── PyMuPDFExtractor       # primario
+└── PdfPlumberExtractor    # fallback
 ```
 
-Los campos `created_by_user_id`, `uploaded_by_user_id` y `deleted_by_user_id` deben apuntar a usuarios existentes.
+La estrategia intenta pdfplumber cuando PyMuPDF:
 
-## Endpoints
+- produce una excepción;
+- no alcanza el mínimo de caracteres;
+- supera el porcentaje permitido de páginas vacías;
+- no alcanza el promedio mínimo de caracteres por página.
 
-### Licitaciones
+Si ambos resultados existen, se conserva el de mayor cantidad de texto, menor porcentaje vacío y mayor cantidad de páginas.
+
+## Evaluación de calidad
+
+La densidad se calcula como caracteres extraídos entre el área total de las páginas en pulgadas cuadradas.
+
+Decisiones:
+
+- `ready_for_ai`: texto suficiente, pocas páginas vacías y densidad mínima;
+- `needs_ocr`: documento vacío o con texto extremadamente escaso;
+- `manual_review`: calidad intermedia; se conserva en `DocumentQuality` y el estado operativo se marca `needs_ocr` porque OCR/revisión serán resueltos en una iteración posterior.
+
+Todos los umbrales son configurables mediante variables `SMARTQUOTE_QUALITY_*`.
+
+## Idempotencia
+
+La clave SHA-256 de procesamiento incluye:
+
+- hash SHA-256 del PDF;
+- nombre y versión de PyMuPDF;
+- nombre y versión de pdfplumber;
+- política de fallback;
+- configuración de calidad/extracción aplicable.
+
+Una ejecución completada con la misma clave se reutiliza. La restricción única `(document_id, processing_key)` evita ejecuciones válidas duplicadas.
+
+## Endpoints de documentos
 
 | Método | Ruta | Resultado |
 |---|---|---|
-| `POST` | `/api/v1/tenders` | Crear una licitación |
-| `GET` | `/api/v1/tenders` | Listar licitaciones activas |
-| `GET` | `/api/v1/tenders/{id}` | Consultar una licitación |
-| `PUT` | `/api/v1/tenders/{id}` | Reemplazar datos editables |
-| `DELETE` | `/api/v1/tenders/{id}` | Archivar lógicamente |
+| `POST` | `/api/v1/tenders/{id}/documents` | Carga PDFs y dispara el pipeline |
+| `GET` | `/api/v1/documents/{id}/status` | Estado y fechas del procesamiento |
+| `GET` | `/api/v1/documents/{id}/pages` | Texto y métricas por página |
+| `GET` | `/api/v1/documents/{id}/quality` | Evaluación de calidad |
+| `GET` | `/api/v1/documents/{id}/extraction` | Evidencia de la ejecución |
+| `GET` | `/api/v1/documents/{id}/download` | Descarga privada |
+| `DELETE` | `/api/v1/documents/{id}` | Eliminación lógica |
 
-### Documentos
+No existe endpoint HTTP para iniciar manualmente el pipeline.
 
-| Método | Ruta | Resultado |
-|---|---|---|
-| `POST` | `/api/v1/tenders/{id}/documents` | Cargar uno o varios PDFs |
-| `GET` | `/api/v1/tenders/{id}/documents` | Listar documentos activos |
-| `GET` | `/api/v1/documents/{id}` | Consultar metadatos |
-| `GET` | `/api/v1/documents/{id}/download` | Descargar el PDF privado |
-| `DELETE` | `/api/v1/documents/{id}` | Eliminar lógicamente |
-
-## Ejemplo completo
-
-### 1. Crear una licitación
+## Ejemplo
 
 ```bash
-curl -X POST http://localhost:8000/api/v1/tenders \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "title": "Adquisición de transformadores 2026",
-    "description": "Suministro nacional para instalaciones eléctricas.",
-    "deadline": "2026-08-31T18:00:00-06:00",
-    "created_by_user_id": "00000000-0000-0000-0000-000000000001"
-  }'
-```
-
-### 2. Cargar uno o varios documentos
-
-```bash
-curl -X POST \
-  http://localhost:8000/api/v1/tenders/8e2211ec-5f39-4a4d-9844-b8c64e9038c3/documents \
+curl -X POST http://localhost:8000/api/v1/tenders/TENDER_ID/documents \
   -F 'uploaded_by_user_id=00000000-0000-0000-0000-000000000001' \
-  -F 'files=@bases.pdf;type=application/pdf' \
-  -F 'files=@anexo-tecnico.pdf;type=application/pdf'
+  -F 'files=@bases.pdf;type=application/pdf'
+
+curl http://localhost:8000/api/v1/documents/DOCUMENT_ID/status
+curl http://localhost:8000/api/v1/documents/DOCUMENT_ID/pages
+curl http://localhost:8000/api/v1/documents/DOCUMENT_ID/quality
+curl http://localhost:8000/api/v1/documents/DOCUMENT_ID/extraction
 ```
 
-Respuesta `201 Created`:
-
-```json
-{
-  "items": [
-    {
-      "id": "f2c7a182-97ba-4828-8621-62282051393d",
-      "tender_id": "8e2211ec-5f39-4a4d-9844-b8c64e9038c3",
-      "original_file_name": "bases.pdf",
-      "mime_type": "application/pdf",
-      "file_size": 245760,
-      "file_hash": "c4d88d14a6a20d76d70fb5f81cbcc9e1c24407f82d875559b8423a34e3bbfa8a",
-      "status": "uploaded",
-      "uploaded_by_user_id": "00000000-0000-0000-0000-000000000001",
-      "uploaded_at": "2026-07-25T18:00:00Z",
-      "updated_at": "2026-07-25T18:00:00Z"
-    }
-  ],
-  "total": 1
-}
-```
-
-### 3. Listar documentos
-
-```bash
-curl http://localhost:8000/api/v1/tenders/8e2211ec-5f39-4a4d-9844-b8c64e9038c3/documents
-```
-
-### 4. Consultar metadatos
-
-```bash
-curl http://localhost:8000/api/v1/documents/f2c7a182-97ba-4828-8621-62282051393d
-```
-
-La API nunca expone la ruta física ni la clave interna de almacenamiento.
-
-### 5. Descargar
-
-```bash
-curl -OJ \
-  http://localhost:8000/api/v1/documents/f2c7a182-97ba-4828-8621-62282051393d/download
-```
-
-La respuesta incluye `Content-Disposition: attachment` y `X-Content-Type-Options: nosniff`.
-
-### 6. Eliminar lógicamente
-
-```bash
-curl -X DELETE \
-  'http://localhost:8000/api/v1/documents/f2c7a182-97ba-4828-8621-62282051393d?deleted_by_user_id=00000000-0000-0000-0000-000000000001'
-```
-
-Respuesta `204 No Content`. El documento deja de listarse y descargarse. El archivo privado se conserva hasta que exista una política de retención y purga física.
-
-## Uso desde Swagger
-
-1. Abrir `http://localhost:8000/docs`.
-2. Crear o copiar el UUID de una licitación en estado `draft` o `documents_pending`.
-3. Abrir `POST /api/v1/tenders/{tender_id}/documents`.
-4. Seleccionar **Try it out**.
-5. Capturar `uploaded_by_user_id`.
-6. Seleccionar uno o varios archivos en `files`.
-7. Ejecutar la solicitud.
-
-El contrato OpenAPI declara explícitamente `multipart/form-data` y un arreglo de archivos binarios.
-
-## Reglas documentales
-
-- Solo se permiten archivos con extensión `.pdf`.
-- El MIME declarado debe ser `application/pdf`.
-- El contenido debe incluir la firma binaria `%PDF-` en sus primeros 1,024 bytes.
-- El archivo no puede estar vacío.
-- El tamaño máximo y la cantidad por solicitud son configurables.
-- El nombre original no puede contener rutas, separadores ni caracteres de control.
-- El SHA-256 se calcula sobre los bytes recibidos.
-- Un hash no puede repetirse dentro de la misma licitación, incluso si la carga anterior fue eliminada lógicamente.
-- Solo se aceptan cargas cuando la licitación está en `draft` o `documents_pending`.
-- Las licitaciones archivadas, cerradas, canceladas o en fases posteriores no aceptan documentos.
-- La primera carga cambia una licitación `draft` a `documents_pending`.
-- El estado inicial del documento es `uploaded`.
-
-Estados implementados:
+## Configuración relevante
 
 ```text
-uploaded
-rejected
-deleted
+SMARTQUOTE_CELERY_BROKER_URL=redis://redis:6379/0
+SMARTQUOTE_CELERY_RESULT_BACKEND=redis://redis:6379/1
+SMARTQUOTE_PENDING_DOCUMENT_SCAN_SECONDS=60
+SMARTQUOTE_EXTRACTION_MINIMUM_CHARACTERS=100
+SMARTQUOTE_EXTRACTION_MAXIMUM_EMPTY_PAGE_PERCENTAGE=60
+SMARTQUOTE_QUALITY_READY_MINIMUM_CHARACTERS=200
+SMARTQUOTE_QUALITY_READY_MAXIMUM_EMPTY_PAGE_PERCENTAGE=25
+SMARTQUOTE_QUALITY_READY_MINIMUM_DENSITY=1.5
+SMARTQUOTE_QUALITY_OCR_MAXIMUM_CHARACTERS=50
+SMARTQUOTE_QUALITY_OCR_MINIMUM_EMPTY_PAGE_PERCENTAGE=50
+SMARTQUOTE_QUALITY_OCR_MAXIMUM_DENSITY=0.5
 ```
 
-No existen estados de extracción, OCR o procesamiento en el dominio de esta iteración.
-
-## Almacenamiento privado
-
-La estructura física es:
-
-```text
-storage/private/
-└── tenders/
-    └── <tender_uuid>/
-        └── <document_uuid>.pdf
-```
-
-El nombre proporcionado por el usuario se conserva únicamente como metadato. El nombre físico usa UUIDs y no permite controlar rutas del sistema.
-
-`LocalFileStorage`:
-
-- resuelve y verifica que cada ruta permanezca dentro de la raíz privada;
-- crea directorios con permisos privados;
-- escribe primero en un archivo temporal;
-- fuerza la escritura con `fsync`;
-- mueve el archivo de forma atómica;
-- asigna permisos `0600` al archivo cuando el sistema lo permite.
-
-## Sustituir LocalFileStorage por MinIO o S3
-
-La capa Application depende únicamente de:
-
-```python
-class FileStorage(ABC):
-    def store(self, tender_id, document_id, content) -> str: ...
-    def read(self, storage_key) -> bytes: ...
-    def delete(self, storage_key) -> None: ...
-```
-
-Para cambiar el backend de almacenamiento:
-
-1. Crear un adaptador que implemente `FileStorage`.
-2. Mantener `storage_key` como identificador opaco y no como URL pública.
-3. Sustituir la dependencia `get_file_storage` en `app/api/dependencies.py`.
-4. No modificar Domain, DTOs, casos de uso ni endpoints.
-
-También existe el puerto `FileThreatScanner` como punto de extensión previo al almacenamiento. No se conecta ningún antivirus en esta iteración.
-
-## Auditoría
-
-Eventos persistidos:
-
-- `DocumentUploaded`: documento, licitación, usuario y hash.
-- `DocumentDeleted`: documento, licitación, usuario y hash.
-- `DuplicateDocumentDetected`: licitación, usuario, hash y nombre original.
-
-Los eventos se confirman dentro de la misma transacción que sus metadatos, excepto la detección de duplicado, que se registra antes de devolver el conflicto `409`.
-
-## Errores documentales
-
-| HTTP | `code` | Significado |
-|---:|---|---|
-| `404` | `document_not_found` | Documento inexistente, eliminado o perteneciente a una licitación archivada |
-| `409` | `duplicate_document` | Hash repetido en la misma licitación |
-| `409` | `document_already_deleted` | Segundo intento de eliminación |
-| `409` | `invalid_tender_state` | La licitación no acepta cargas |
-| `409` | `tender_already_archived` | La licitación está archivada |
-| `413` | `document_too_large` | Archivo o cuerpo multipart superior al límite |
-| `422` | `invalid_document_file` | Extensión, MIME, firma, nombre o formulario inválido |
-| `422` | `too_many_documents` | Demasiados archivos en una solicitud |
-| `422` | `document_user_not_found` | Usuario de carga o eliminación inexistente |
-| `503` | `document_storage_unavailable` | Error de lectura o escritura del almacenamiento privado |
-
-## Pruebas y calidad
+## Pruebas
 
 ```bash
 cd backend
+uv sync
+uv run alembic upgrade head
 uv run pytest
-uv run --with coverage coverage run --source=app -m pytest -q
-uv run --with coverage coverage report --fail-under=90
 uv run ruff check .
 uv run python -m compileall app tests alembic
 ```
 
-La integración continua valida automáticamente:
+La suite incluye PDFs reales pequeños en `tests/fixtures/` y pruebas de:
 
-- Ruff lint y compilación;
-- pruebas unitarias;
-- pruebas de integración con PostgreSQL 16;
-- upgrade, rollback y nuevo upgrade de Alembic;
-- cobertura mínima del 90%;
-- contrato OpenAPI, incluido multipart;
-- construcción de la imagen Docker.
+- extractores;
+- fallback;
+- métricas;
+- estados;
+- pipeline completo;
+- persistencia de páginas;
+- idempotencia;
+- endpoints;
+- worker Celery con Redis real.
 
 ## Documentación técnica
 
-- `docs/iteration-3-tender-management.md`
 - `docs/iteration-4-document-management.md`
+- `docs/iteration-5-text-extraction-pipeline.md`
 - `docs/continuous-integration.md`
-- `docs/vision-tecnica.md`
-- `docs/adr/`

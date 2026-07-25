@@ -29,6 +29,7 @@ class SqlAlchemyTenderDocumentRepository(TenderDocumentRepository):
         document_id: UUID,
         *,
         include_deleted: bool = False,
+        for_update: bool = False,
     ) -> TenderDocument | None:
         statement = (
             select(TenderDocumentModel)
@@ -42,6 +43,8 @@ class SqlAlchemyTenderDocumentRepository(TenderDocumentRepository):
             statement = statement.where(
                 TenderDocumentModel.processing_status != DocumentStatus.DELETED.value
             )
+        if for_update:
+            statement = statement.with_for_update()
         model = self._session.scalars(statement).first()
         return tender_document_to_domain(model) if model else None
 
@@ -55,6 +58,25 @@ class SqlAlchemyTenderDocumentRepository(TenderDocumentRepository):
                 TenderModel.deleted_at.is_(None),
             )
             .order_by(TenderDocumentModel.created_at.desc())
+        )
+        return [tender_document_to_domain(model) for model in self._session.scalars(statement)]
+
+    def list_by_statuses(
+        self,
+        statuses: set[DocumentStatus],
+        *,
+        limit: int = 100,
+    ) -> list[TenderDocument]:
+        values = [status.value for status in statuses]
+        statement = (
+            select(TenderDocumentModel)
+            .join(TenderModel, TenderModel.id == TenderDocumentModel.tender_id)
+            .where(
+                TenderDocumentModel.processing_status.in_(values),
+                TenderModel.deleted_at.is_(None),
+            )
+            .order_by(TenderDocumentModel.created_at)
+            .limit(limit)
         )
         return [tender_document_to_domain(model) for model in self._session.scalars(statement)]
 
