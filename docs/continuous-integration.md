@@ -1,6 +1,6 @@
 # Integración continua
 
-El workflow `.github/workflows/smartquote-ci.yml` se ejecuta automáticamente en:
+El workflow `.github/workflows/iteration-3-ci.yml` conserva su ruta histórica y se ejecuta automáticamente en:
 
 - cada `push` a cualquier rama;
 - apertura, actualización, reapertura o paso a revisión de un pull request;
