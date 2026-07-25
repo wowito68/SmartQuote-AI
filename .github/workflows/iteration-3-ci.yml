@@ -44,7 +44,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
-      SMARTQUOTE_DATABASE_URL: sqlite+pysqlite:///:memory:
+      SMARTQUOTE_DATABASE_URL: "sqlite+pysqlite:///:memory:"
       SMARTQUOTE_STORAGE_ROOT: /tmp/smartquote-unit-storage
     defaults:
       run:
@@ -91,7 +91,7 @@ jobs:
         working-directory: backend
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout
 
       - name: Install uv
         uses: astral-sh/setup-uv@v6
@@ -133,7 +133,7 @@ jobs:
         working-directory: backend
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout
 
       - name: Install uv
         uses: astral-sh/setup-uv@v6
@@ -218,14 +218,14 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
-      SMARTQUOTE_DATABASE_URL: sqlite+pysqlite:///:memory:
+      SMARTQUOTE_DATABASE_URL: "sqlite+pysqlite:///:memory:"
       SMARTQUOTE_STORAGE_ROOT: /tmp/smartquote-openapi-storage
     defaults:
       run:
         working-directory: backend
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout
 
       - name: Install uv
         uses: astral-sh/setup-uv@v6
