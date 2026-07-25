@@ -1,0 +1,26 @@
+services:
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    env_file:
+      - .env.example
+    environment:
+      SMARTQUOTE_DATABASE_URL: postgresql+psycopg://smartquote:smartquote@postgres:5432/smartquote
+    ports:
+      - "8000:8000"
+    command: uv run uvicorn app.main:app --host 0.0.0.0 --port 8000
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: smartquote
+      POSTGRES_USER: smartquote
+      POSTGRES_PASSWORD: smartquote
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:

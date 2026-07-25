@@ -1,0 +1,2 @@
+"""Tender domain module."""
+
