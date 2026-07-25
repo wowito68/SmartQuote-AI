@@ -5,14 +5,16 @@ from app.api.routes.documents import router as documents_router
 from app.api.routes.health import router as health_router
 from app.api.routes.tenders import router as tenders_router
 from app.config.settings import get_settings
+from app.infrastructure.observability.logging import configure_logging
 
 
 def create_app() -> FastAPI:
+    configure_logging()
     settings = get_settings()
     application = FastAPI(
         title=settings.project_name,
         version=settings.version,
-        description="REST API for SmartQuote AI tender and document management.",
+        description="REST API for SmartQuote AI tender document processing.",
     )
     register_exception_handlers(application)
     application.include_router(health_router)

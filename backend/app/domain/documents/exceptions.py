@@ -35,3 +35,23 @@ class DocumentUploaderNotFound(DocumentError):
 
 class DocumentStorageFailure(DocumentError):
     """Raised when private file storage cannot complete an operation."""
+
+
+class InvalidDocumentState(DocumentError):
+    """Raised when a document lifecycle transition is not allowed."""
+
+
+class DocumentExtractionFailure(DocumentError):
+    """Raised when every configured text extractor fails."""
+
+
+class DocumentExtractionNotFound(DocumentError):
+    """Raised when extraction evidence is not available."""
+
+
+class DocumentQualityNotFound(DocumentError):
+    """Raised when quality evidence is not available."""
+
+
+class DocumentProcessingQueueFailure(DocumentError):
+    """Raised when a document cannot be published to the processing queue."""

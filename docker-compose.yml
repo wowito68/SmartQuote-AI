@@ -3,16 +3,55 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    env_file:
-      - .env.example
+    env_file: [.env.example]
     environment:
       SMARTQUOTE_DATABASE_URL: postgresql+psycopg://smartquote:smartquote@postgres:5432/smartquote
       SMARTQUOTE_STORAGE_ROOT: /app/storage/private
-    ports:
-      - "8000:8000"
-    volumes:
-      - document_storage:/app/storage/private
+      SMARTQUOTE_CELERY_BROKER_URL: redis://redis:6379/0
+      SMARTQUOTE_CELERY_RESULT_BACKEND: redis://redis:6379/1
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports: ["8000:8000"]
+    volumes: [document_storage:/app/storage/private]
     command: uv run uvicorn app.main:app --host 0.0.0.0 --port 8000
+
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    env_file: [.env.example]
+    environment:
+      SMARTQUOTE_DATABASE_URL: postgresql+psycopg://smartquote:smartquote@postgres:5432/smartquote
+      SMARTQUOTE_STORAGE_ROOT: /app/storage/private
+      SMARTQUOTE_CELERY_BROKER_URL: redis://redis:6379/0
+      SMARTQUOTE_CELERY_RESULT_BACKEND: redis://redis:6379/1
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes: [document_storage:/app/storage/private]
+    command: uv run celery -A app.infrastructure.tasks.celery_app:celery_app worker --loglevel=INFO --queues=document-processing --concurrency=2
+
+  beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    env_file: [.env.example]
+    environment:
+      SMARTQUOTE_DATABASE_URL: postgresql+psycopg://smartquote:smartquote@postgres:5432/smartquote
+      SMARTQUOTE_STORAGE_ROOT: /app/storage/private
+      SMARTQUOTE_CELERY_BROKER_URL: redis://redis:6379/0
+      SMARTQUOTE_CELERY_RESULT_BACKEND: redis://redis:6379/1
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: uv run celery -A app.infrastructure.tasks.celery_app:celery_app beat --loglevel=INFO
 
   postgres:
     image: postgres:16-alpine
@@ -20,11 +59,26 @@ services:
       POSTGRES_DB: smartquote
       POSTGRES_USER: smartquote
       POSTGRES_PASSWORD: smartquote
-    ports:
-      - "5433:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
+    ports: ["5433:5432"]
+    volumes: [postgres_data:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U smartquote -d smartquote"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports: ["6379:6379"]
+    command: redis-server --appendonly yes
+    volumes: [redis_data:/data]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
 
 volumes:
   postgres_data:
+  redis_data:
   document_storage:

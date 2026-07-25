@@ -22,6 +22,7 @@ from sqlalchemy.types import Uuid
 from app.infrastructure.db.base import Base
 
 if TYPE_CHECKING:
+    from app.infrastructure.db.models.document_processing import ExtractionRunModel
     from app.infrastructure.db.models.user import UserModel
 
 
@@ -66,7 +67,8 @@ class TenderDocumentModel(Base):
     __table_args__ = (
         CheckConstraint("file_size > 0", name="positive_file_size"),
         CheckConstraint(
-            "processing_status IN ('uploaded', 'deleted', 'rejected')",
+            "processing_status IN ('uploaded', 'queued', 'processing', 'text_extracted', "
+            "'ready_for_ai', 'needs_ocr', 'failed', 'deleted', 'rejected')",
             name="valid_document_status",
         ),
         UniqueConstraint("tender_id", "file_hash", name="uq_tender_documents_tender_file_hash"),
@@ -74,6 +76,7 @@ class TenderDocumentModel(Base):
         Index("ix_tender_documents_uploaded_by_user_id", "uploaded_by_user_id"),
         Index("ix_tender_documents_file_hash", "file_hash"),
         Index("ix_tender_documents_deleted_at", "deleted_at"),
+        Index("ix_tender_documents_processing_status", "processing_status"),
     )
 
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True)
@@ -98,6 +101,16 @@ class TenderDocumentModel(Base):
         DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
     )
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    queued_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    processing_started_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_processing_error: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     tender: Mapped[TenderModel] = relationship(back_populates="documents")
     uploaded_by: Mapped[UserModel] = relationship(back_populates="uploaded_documents")
+    extraction_runs: Mapped[list[ExtractionRunModel]] = relationship(
+        cascade="all, delete-orphan",
+        order_by="ExtractionRunModel.created_at",
+    )
