@@ -17,3 +17,5 @@ El workflow `.github/workflows/iteration-3-ci.yml` se ejecuta automáticamente e
 7. **Docker image build**: valida que la imagen del backend pueda construirse.
 
 Un commit que solo existe localmente no puede ser probado por GitHub. La ejecución comienza cuando el commit se publica mediante `push` o forma parte de una actualización de pull request.
+
+El workflow evita filtros por rutas para que cambios en código, configuración o documentación se validen de la misma manera.
