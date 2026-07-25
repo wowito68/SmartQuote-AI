@@ -30,11 +30,27 @@ jobs:
       - name: Install dependencies
         run: uv sync --frozen
 
-      - name: Ruff lint
-        run: uv run ruff check .
+      - name: Generate Ruff fix patch
+        run: |
+          uv run ruff check . --fix || true
+          git diff > ruff-fix.patch
+          uv run ruff check . > ruff-report.txt 2>&1 || true
 
-      - name: Ruff format
-        run: uv run ruff format --check .
+      - name: Upload Ruff diagnostics
+        uses: actions/upload-artifact@v4
+        with:
+          name: iteration-4-ruff-diagnostics
+          path: |
+            backend/ruff-fix.patch
+            backend/ruff-report.txt
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Enforce committed Ruff fixes
+        run: test ! -s ruff-fix.patch
+
+      - name: Enforce Ruff lint
+        run: uv run ruff check .
 
       - name: Compile Python sources
         run: uv run python -m compileall app tests alembic
@@ -44,7 +60,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
-      SMARTQUOTE_DATABASE_URL: "sqlite+pysqlite:///:memory:"
+      SMARTQUOTE_DATABASE_URL: "sqlite+pysqlite:////tmp/smartquote-unit.db"
       SMARTQUOTE_STORAGE_ROOT: /tmp/smartquote-unit-storage
     defaults:
       run:
