@@ -31,33 +31,37 @@ jobs:
           from pathlib import Path
 
           matching = Path('backend/app/application/services/supplier_matching.py')
-          text = matching.read_text()
-          old = '''        if product_category and supplier.category:
-              if product_category.casefold().strip() == supplier.category.casefold().strip():
-                  category_similarity = 1.0
-          '''
-          new = '''        if (
-              product_category
-              and supplier.category
-              and product_category.casefold().strip() == supplier.category.casefold().strip()
-          ):
-              category_similarity = 1.0
-          '''
-          if old not in text:
-              raise SystemExit('matching block not found')
-          matching.write_text(text.replace(old, new))
+          lines = matching.read_text().splitlines()
+          index = next(
+              i for i, line in enumerate(lines)
+              if line.strip() == 'if product_category and supplier.category:'
+          )
+          indent = lines[index][:-len(lines[index].lstrip())]
+          lines[index:index + 3] = [
+              f'{indent}if (',
+              f'{indent}    product_category',
+              f'{indent}    and supplier.category',
+              f'{indent}    and product_category.casefold().strip()',
+              f'{indent}    == supplier.category.casefold().strip()',
+              f'{indent}):',
+              f'{indent}    category_similarity = 1.0',
+          ]
+          matching.write_text('\n'.join(lines) + '\n')
 
           test_file = Path('backend/tests/integration/test_supplier_discovery_pipeline.py')
-          text = test_file.read_text()
-          old = '''            item for item in body["suppliers"] if item["normalized_domain"] == "conductores.example.mx"
-          '''
-          new = '''            item
-              for item in body["suppliers"]
-              if item["normalized_domain"] == "conductores.example.mx"
-          '''
-          if old not in text:
-              raise SystemExit('test line not found')
-          test_file.write_text(text.replace(old, new))
+          lines = test_file.read_text().splitlines()
+          index = next(
+              i for i, line in enumerate(lines)
+              if 'item for item in body["suppliers"]' in line
+              and 'conductores.example.mx' in line
+          )
+          indent = lines[index][:-len(lines[index].lstrip())]
+          lines[index:index + 1] = [
+              f'{indent}item',
+              f'{indent}for item in body["suppliers"]',
+              f'{indent}if item["normalized_domain"] == "conductores.example.mx"',
+          ]
+          test_file.write_text('\n'.join(lines) + '\n')
           PY
           cd backend
           uv run ruff check .
