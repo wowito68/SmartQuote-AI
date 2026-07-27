@@ -1,5 +1,23 @@
 # Validación de la Iteración 8
 
+## Resultado final
+
+La ejecución definitiva de GitHub Actions se realizó sobre la rama
+`agent/iteration-8-rfq-email-delivery` con PostgreSQL 16 y Redis 7.
+
+Los siete trabajos terminaron correctamente:
+
+- Ruff lint y compilación Python;
+- pruebas unitarias;
+- pruebas de integración, API y Celery;
+- ciclo Alembic `upgrade → downgrade → upgrade`;
+- cobertura completa con umbral mínimo de 90%;
+- contrato OpenAPI;
+- construcción de la imagen Docker con dependencias congeladas.
+
+La suite completa contiene **100 pruebas aprobadas**. La cobertura alcanzada fue
+de **90.76%**: 6,570 de 7,239 líneas.
+
 ## Escenario reproducible
 
 La prueba de integración crea un catálogo aprobado y tres proveedores aprobados:
@@ -8,7 +26,7 @@ La prueba de integración crea un catálogo aprobado y tres proveedores aprobado
 2. `Cables del Bajío`, sin correo público;
 3. `Proveedor Manual`, con correo agregado por un usuario.
 
-Se generan tres RFQs parametrizadas con un PDF adjunto. El resultado esperado es:
+Se generan tres RFQs parametrizadas con un PDF adjunto. El resultado obtenido es:
 
 - tres borradores en `pending_review`;
 - una RFQ identificada como proveedor sin correo;
@@ -30,17 +48,22 @@ duration_ms = 37
 external_message_id = <test-{attempt}@example.mx>
 ```
 
-No se envían correos reales ni se utilizan credenciales externas durante las pruebas.
+Métricas del escenario:
 
-## Resultado local previo a CI
+- RFQs generadas: 3;
+- RFQs enviadas: 2;
+- RFQs canceladas: 1;
+- intentos fallidos: 1;
+- reintentos: 1;
+- porcentaje de éxito de RFQs: 66.67%;
+- destinatarios del envío múltiple: 2;
+- duración simulada por intento SMTP: 37 ms.
 
-- 100 pruebas aprobadas;
-- cobertura local: 90.51%, 6,553 de 7,240 líneas;
-- migración `upgrade → downgrade → upgrade`: aprobada en SQLite;
-- compilación Python: aprobada.
-
-El resultado definitivo con PostgreSQL, Redis, Celery, Ruff, OpenAPI y Docker se registrará en el PR mediante GitHub Actions.
+No se envían correos reales ni se utilizan credenciales externas durante las
+pruebas. La duración simulada valida persistencia y observabilidad, pero no debe
+interpretarse como un benchmark de una red o proveedor SMTP real.
 
 ## Alcance confirmado
 
-No se implementaron monitoreo del buzón, lectura de respuestas, análisis de cotizaciones ni comparativos.
+No se implementaron monitoreo del buzón, lectura de respuestas, análisis de
+cotizaciones ni comparativos.
