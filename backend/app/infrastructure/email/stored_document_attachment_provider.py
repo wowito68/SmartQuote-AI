@@ -62,16 +62,26 @@ class StoredDocumentAttachmentProvider(AttachmentProvider):
             for attachment in attachments:
                 document = uow.documents.get_by_id(attachment.document_id)
                 if document is None:
-                    raise AttachmentValidationError("RFQ attachment document is unavailable.")
+                    raise AttachmentValidationError(
+                        "RFQ attachment document is unavailable."
+                    )
                 if document.file_hash.value != attachment.file_hash:
-                    raise AttachmentValidationError("RFQ attachment hash no longer matches metadata.")
+                    raise AttachmentValidationError(
+                        "RFQ attachment hash no longer matches metadata."
+                    )
                 try:
                     content = self._file_storage.read(document.storage_key)
                 except DocumentStorageFailure as exc:
-                    raise AttachmentValidationError("RFQ attachment content is unavailable.") from exc
+                    raise AttachmentValidationError(
+                        "RFQ attachment content is unavailable."
+                    ) from exc
                 if len(content) != attachment.file_size:
-                    raise AttachmentValidationError("RFQ attachment size no longer matches metadata.")
+                    raise AttachmentValidationError(
+                        "RFQ attachment size no longer matches metadata."
+                    )
                 if hashlib.sha256(content).hexdigest() != attachment.file_hash:
-                    raise AttachmentValidationError("RFQ attachment content failed SHA-256 validation.")
+                    raise AttachmentValidationError(
+                        "RFQ attachment content failed SHA-256 validation."
+                    )
                 result.append(AttachmentContent(attachment, content))
         return tuple(result)
