@@ -25,25 +25,48 @@ jobs:
           enable-cache: true
       - working-directory: backend
         run: uv sync --frozen
-      - name: Apply Ruff fixes and capture remaining findings
-        working-directory: backend
+      - name: Apply remaining fixes
         run: |
-          uv run ruff check . --fix --unsafe-fixes || true
-          uv run ruff check . --output-format=concise > /tmp/ruff-report.txt 2>&1 || true
-      - name: Commit automatic Ruff fixes
+          python - <<'PY'
+          from pathlib import Path
+
+          matching = Path('backend/app/application/services/supplier_matching.py')
+          text = matching.read_text()
+          old = '''        if product_category and supplier.category:
+              if product_category.casefold().strip() == supplier.category.casefold().strip():
+                  category_similarity = 1.0
+          '''
+          new = '''        if (
+              product_category
+              and supplier.category
+              and product_category.casefold().strip() == supplier.category.casefold().strip()
+          ):
+              category_similarity = 1.0
+          '''
+          if old not in text:
+              raise SystemExit('matching block not found')
+          matching.write_text(text.replace(old, new))
+
+          test_file = Path('backend/tests/integration/test_supplier_discovery_pipeline.py')
+          text = test_file.read_text()
+          old = '''            item for item in body["suppliers"] if item["normalized_domain"] == "conductores.example.mx"
+          '''
+          new = '''            item
+              for item in body["suppliers"]
+              if item["normalized_domain"] == "conductores.example.mx"
+          '''
+          if old not in text:
+              raise SystemExit('test line not found')
+          test_file.write_text(text.replace(old, new))
+          PY
+          cd backend
+          uv run ruff check .
+          uv run python -m compileall app tests alembic
+      - name: Commit remaining fixes
         run: |
           git checkout HEAD -- .github/workflows/fix-iteration-7-ruff.yml
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add backend
-          if ! git diff --cached --quiet; then
-            git commit -m 'Apply Ruff fixes for Iteration 7'
-            git push origin HEAD:agent/iteration-7-supplier-discovery
-          fi
-      - name: Upload Ruff report
-        uses: actions/upload-artifact@v4
-        with:
-          name: iteration-7-ruff-report
-          path: /tmp/ruff-report.txt
-          if-no-files-found: error
-          retention-days: 1
+          git commit -m 'Resolve remaining Ruff findings'
+          git push origin HEAD:agent/iteration-7-supplier-discovery
