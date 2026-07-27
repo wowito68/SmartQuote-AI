@@ -24,10 +24,11 @@ jobs:
         with:
           python-version: '3.12'
           enable-cache: true
-      - name: Verify and apply implementation patch
+      - name: Reconstruct, verify and apply implementation
         run: |
-          echo 'e7297fb9479c64fb8aeae0ca9c2f3eadc11071075a0b282b9f3149f1cb4b2853  .iteration8/implementation.patch.gz' | sha256sum --check
-          gzip -dc .iteration8/implementation.patch.gz > /tmp/iteration8.patch
+          cat .iteration8/parts/part-* | base64 --decode > /tmp/iteration8.patch.gz
+          echo 'e7297fb9479c64fb8aeae0ca9c2f3eadc11071075a0b282b9f3149f1cb4b2853  /tmp/iteration8.patch.gz' | sha256sum --check
+          gzip -dc /tmp/iteration8.patch.gz > /tmp/iteration8.patch
           patch --batch --forward -p1 < /tmp/iteration8.patch
       - name: Update frozen dependency lock
         working-directory: backend
