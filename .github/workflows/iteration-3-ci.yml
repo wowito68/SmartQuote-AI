@@ -222,6 +222,13 @@ jobs:
               "/api/v1/suppliers/{supplier_id}/reject": {"post"},
               "/api/v1/suppliers/merge": {"post"},
               "/api/v1/suppliers/manual": {"post"},
+              "/api/v1/tenders/{tender_id}/rfqs/generate": {"post"},
+              "/api/v1/tenders/{tender_id}/rfqs": {"get"},
+              "/api/v1/rfqs/{rfq_id}": {"get", "put"},
+              "/api/v1/rfqs/{rfq_id}/approve": {"post"},
+              "/api/v1/rfqs/{rfq_id}/cancel": {"post"},
+              "/api/v1/rfqs/{rfq_id}/send": {"post"},
+              "/api/v1/rfqs/{rfq_id}/messages": {"get"},
           }
           for path, methods in expected.items():
               assert path in schema["paths"]
