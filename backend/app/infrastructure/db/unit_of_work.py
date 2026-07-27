@@ -13,6 +13,9 @@ from app.infrastructure.db.repositories.document_processing_repository import (
 from app.infrastructure.db.repositories.document_repository import (
     SqlAlchemyTenderDocumentRepository,
 )
+from app.infrastructure.db.repositories.supplier_repository import (
+    SqlAlchemySupplierRepository,
+)
 from app.infrastructure.db.repositories.tender_repository import SqlAlchemyTenderRepository
 from app.infrastructure.db.repositories.user_lookup import SqlAlchemyUserLookup
 from app.infrastructure.db.session import SessionLocal
@@ -30,6 +33,7 @@ class SqlAlchemyUnitOfWork(UnitOfWork):
         self.extractions = SqlAlchemyExtractionRepository(self._session)
         self.audit_events = SqlAlchemyAuditEventRepository(self._session)
         self.catalogs = SqlAlchemyCatalogRepository(self._session)
+        self.suppliers = SqlAlchemySupplierRepository(self._session)
         self.users = SqlAlchemyUserLookup(self._session)
         return self
 

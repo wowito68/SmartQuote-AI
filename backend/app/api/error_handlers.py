@@ -30,6 +30,15 @@ from app.domain.documents.exceptions import (
     TooManyDocuments,
 )
 from app.domain.shared.exceptions import ValidationError
+from app.domain.suppliers.exceptions import (
+    InvalidSupplierDiscoveryState,
+    InvalidSupplierState,
+    SupplierDiscoveryNotFound,
+    SupplierDiscoveryQueueFailure,
+    SupplierMergeConflict,
+    SupplierNotFound,
+    SupplierSearchFailure,
+)
 from app.domain.tenders.exceptions import (
     InvalidDeadline,
     InvalidTenderState,
@@ -115,6 +124,29 @@ def register_exception_handlers(app: FastAPI) -> None:
             "ai_extraction_unavailable",
         ),
         (PromptNotFound, status.HTTP_503_SERVICE_UNAVAILABLE, "prompt_not_found"),
+        (SupplierNotFound, status.HTTP_404_NOT_FOUND, "supplier_not_found"),
+        (
+            SupplierDiscoveryNotFound,
+            status.HTTP_404_NOT_FOUND,
+            "supplier_discovery_not_found",
+        ),
+        (InvalidSupplierState, status.HTTP_409_CONFLICT, "invalid_supplier_state"),
+        (
+            InvalidSupplierDiscoveryState,
+            status.HTTP_409_CONFLICT,
+            "invalid_supplier_discovery_state",
+        ),
+        (SupplierMergeConflict, status.HTTP_409_CONFLICT, "supplier_merge_conflict"),
+        (
+            SupplierSearchFailure,
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "supplier_search_unavailable",
+        ),
+        (
+            SupplierDiscoveryQueueFailure,
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "supplier_queue_unavailable",
+        ),
         (ValidationError, status.HTTP_422_UNPROCESSABLE_CONTENT, "validation_error"),
     ]
 

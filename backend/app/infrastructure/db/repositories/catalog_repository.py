@@ -170,6 +170,10 @@ class SqlAlchemyCatalogRepository(CatalogRepository):
         self._session.flush()
         return snapshot_to_domain(model)
 
+    def get_snapshot(self, snapshot_id: UUID) -> CatalogSnapshot | None:
+        model = self._session.get(CatalogSnapshotModel, snapshot_id)
+        return snapshot_to_domain(model) if model else None
+
     def get_latest_snapshot(self, tender_id: UUID) -> CatalogSnapshot | None:
         statement = (
             select(CatalogSnapshotModel)

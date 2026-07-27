@@ -18,3 +18,9 @@ El lockfile resuelto se publica temporalmente como artifact durante el desarroll
 El job de integración mantiene PostgreSQL 16 y Redis 7. La suite nueva prueba la cola `ai-extraction`, un worker Celery real y el flujo completo de catálogo, pero sustituye el proveedor OpenAI por una respuesta estructurada local. Ningún check de CI realiza llamadas facturables ni requiere una clave real.
 
 El contrato OpenAPI verifica los cinco endpoints de catálogo y la cobertura mínima continúa en 90%.
+
+## Validaciones de la Iteración 7
+
+El contrato OpenAPI incluye los ocho endpoints de proveedores. La suite de integración valida el pipeline completo con un proveedor de búsqueda determinístico y un worker Celery real conectado a Redis. No se realizan búsquedas web ni llamadas externas durante CI.
+
+Además se cubren persistencia de maestros globales, asociaciones por licitación, contactos, fuentes, matching, deduplicación, idempotencia, aprobación, rechazo, creación manual y fusión. El umbral global de cobertura continúa en 90%.
