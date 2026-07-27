@@ -1,0 +1,27 @@
+name: Export Iteration 7 Base
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    if: github.event.pull_request.head.ref == 'agent/iteration-7-supplier-discovery'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: agent/iteration-7-supplier-discovery
+      - name: Create source archive
+        run: tar --exclude=.git --exclude=.github/workflows/export-iteration-7-base.yml -czf /tmp/smartquote-iteration-7-base.tar.gz .
+      - name: Upload source archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: smartquote-iteration-7-base
+          path: /tmp/smartquote-iteration-7-base.tar.gz
+          retention-days: 1
