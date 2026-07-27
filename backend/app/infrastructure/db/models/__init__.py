@@ -12,6 +12,15 @@ from app.infrastructure.db.models.document_processing import (
     DocumentQualityModel,
     ExtractionRunModel,
 )
+from app.infrastructure.db.models.supplier import (
+    ProductSupplierMatchModel,
+    SupplierContactModel,
+    SupplierDiscoveryRunModel,
+    SupplierMergeSuggestionModel,
+    SupplierModel,
+    SupplierSourceModel,
+    TenderSupplierModel,
+)
 from app.infrastructure.db.models.tender import TenderDocumentModel, TenderModel
 from app.infrastructure.db.models.user import UserModel
 
@@ -26,6 +35,13 @@ __all__ = [
     "DocumentPageModel",
     "DocumentQualityModel",
     "ExtractionRunModel",
+    "ProductSupplierMatchModel",
+    "SupplierContactModel",
+    "SupplierDiscoveryRunModel",
+    "SupplierMergeSuggestionModel",
+    "SupplierModel",
+    "SupplierSourceModel",
+    "TenderSupplierModel",
     "TenderDocumentModel",
     "TenderModel",
     "UserModel",

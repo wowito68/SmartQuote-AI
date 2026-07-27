@@ -11,6 +11,7 @@ celery_app = Celery(
     include=[
         "app.infrastructure.tasks.document_pipeline",
         "app.infrastructure.tasks.catalog_extraction",
+        "app.infrastructure.tasks.supplier_discovery",
     ],
 )
 celery_app.conf.update(
@@ -26,6 +27,7 @@ celery_app.conf.update(
     task_routes={
         "smartquote.documents.*": {"queue": "document-processing"},
         "smartquote.catalog.*": {"queue": "ai-extraction"},
+        "smartquote.suppliers.*": {"queue": "supplier-discovery"},
     },
     task_always_eager=settings.celery_task_always_eager,
     task_eager_propagates=True,

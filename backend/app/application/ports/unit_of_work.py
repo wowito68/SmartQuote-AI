@@ -6,6 +6,7 @@ from app.application.ports.audit_event_repository import AuditEventRepository
 from app.application.ports.catalog_repository import CatalogRepository
 from app.application.ports.document_repository import TenderDocumentRepository
 from app.application.ports.extraction_repository import ExtractionRepository
+from app.application.ports.supplier_repository import SupplierRepository
 from app.application.ports.tender_repository import TenderRepository
 from app.application.ports.user_lookup import UserLookup
 
@@ -16,6 +17,7 @@ class UnitOfWork(ABC):
     extractions: ExtractionRepository
     audit_events: AuditEventRepository
     catalogs: CatalogRepository
+    suppliers: SupplierRepository
     users: UserLookup
 
     @abstractmethod

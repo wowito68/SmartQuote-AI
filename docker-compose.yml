@@ -34,7 +34,7 @@ services:
       redis:
         condition: service_healthy
     volumes: [document_storage:/app/storage/private]
-    command: uv run celery -A app.infrastructure.tasks.celery_app:celery_app worker --loglevel=INFO --queues=document-processing,ai-extraction --concurrency=2
+    command: uv run celery -A app.infrastructure.tasks.celery_app:celery_app worker --loglevel=INFO --queues=document-processing,ai-extraction,supplier-discovery --concurrency=2
 
   beat:
     build:

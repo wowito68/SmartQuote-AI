@@ -19,6 +19,13 @@ def test_migrations_create_tender_and_audit_tables(
         "extracted_evidence",
         "evidence_references",
         "catalog_snapshots",
+        "supplier_discovery_runs",
+        "suppliers",
+        "supplier_contacts",
+        "supplier_sources",
+        "tender_suppliers",
+        "product_supplier_matches",
+        "supplier_merge_suggestions",
     }
     assert expected_tables.issubset(inspector.get_table_names())
 

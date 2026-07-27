@@ -55,7 +55,7 @@ jobs:
   integration-tests:
     name: Integration, API and Celery tests
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     services:
       postgres:
         image: postgres:16
@@ -133,7 +133,7 @@ jobs:
   coverage:
     name: Full test coverage
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     services:
       postgres:
         image: postgres:16
@@ -215,6 +215,13 @@ jobs:
               "/api/v1/tenders/{tender_id}/catalog": {"get"},
               "/api/v1/catalog/{product_id}": {"get", "put"},
               "/api/v1/tenders/{tender_id}/catalog/approve": {"post"},
+              "/api/v1/tenders/{tender_id}/suppliers/discover": {"post"},
+              "/api/v1/tenders/{tender_id}/suppliers": {"get"},
+              "/api/v1/suppliers/{supplier_id}": {"get", "put"},
+              "/api/v1/suppliers/{supplier_id}/approve": {"post"},
+              "/api/v1/suppliers/{supplier_id}/reject": {"post"},
+              "/api/v1/suppliers/merge": {"post"},
+              "/api/v1/suppliers/manual": {"post"},
           }
           for path, methods in expected.items():
               assert path in schema["paths"]

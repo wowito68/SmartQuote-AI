@@ -10,14 +10,14 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.config.settings import get_settings
 
-SQLITE_DB_PATH = Path("/tmp/smartquote_iteration6_test.db")
+SQLITE_DB_PATH = Path("/tmp/smartquote_iteration7_test.db")
 DEFAULT_TEST_DATABASE_URL = f"sqlite+pysqlite:///{SQLITE_DB_PATH}"
 TEST_DATABASE_URL = os.environ.get("SMARTQUOTE_DATABASE_URL", DEFAULT_TEST_DATABASE_URL)
 USING_SQLITE = TEST_DATABASE_URL.startswith("sqlite")
 
 os.environ.setdefault("SMARTQUOTE_DATABASE_URL", TEST_DATABASE_URL)
 os.environ["SMARTQUOTE_ENVIRONMENT"] = "test"
-os.environ.setdefault("SMARTQUOTE_STORAGE_ROOT", "/tmp/smartquote_iteration6_storage")
+os.environ.setdefault("SMARTQUOTE_STORAGE_ROOT", "/tmp/smartquote_iteration7_storage")
 os.environ.setdefault("SMARTQUOTE_CELERY_BROKER_URL", "memory://")
 os.environ.setdefault("SMARTQUOTE_CELERY_RESULT_BACKEND", "cache+memory://")
 os.environ.setdefault("SMARTQUOTE_CELERY_TASK_ALWAYS_EAGER", "true")
@@ -69,6 +69,13 @@ def db_session(db_engine: Engine) -> Generator[Session]:
 def clean_database_after_test(db_engine: Engine) -> Generator[None]:
     yield
     with db_engine.begin() as connection:
+        connection.execute(text("DELETE FROM supplier_merge_suggestions"))
+        connection.execute(text("DELETE FROM product_supplier_matches"))
+        connection.execute(text("DELETE FROM tender_suppliers"))
+        connection.execute(text("DELETE FROM supplier_contacts"))
+        connection.execute(text("DELETE FROM supplier_sources"))
+        connection.execute(text("DELETE FROM suppliers"))
+        connection.execute(text("DELETE FROM supplier_discovery_runs"))
         connection.execute(text("DELETE FROM catalog_product_revisions"))
         connection.execute(text("DELETE FROM evidence_references"))
         connection.execute(text("DELETE FROM extracted_evidence"))

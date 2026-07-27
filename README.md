@@ -309,3 +309,79 @@ El prompt activo está versionado en `backend/app/prompts/catalog_extraction/v1/
 La explicación técnica completa está en `docs/ai-extraction.md`.
 
 Fuera de alcance: proveedores, RFQs, recepción de correo y análisis de cotizaciones.
+
+## Iteración 7: descubrimiento y gestión de proveedores
+
+La Iteración 7 parte únicamente del último snapshot de catálogo aprobado. El descubrimiento se ejecuta en Celery y deja candidatos para revisión humana; nunca aprueba ni elimina proveedores automáticamente.
+
+### Flujo
+
+```mermaid
+flowchart LR
+    A[Approved Catalog] --> B[Supplier Discovery]
+    B --> C[Deduplication]
+    C --> D[Contact Discovery]
+    D --> E[Deterministic Matching]
+    E --> F[Pending Review]
+    F --> G[Approved]
+    F --> H[Rejected]
+    F --> I[Merged]
+```
+
+El modelo distingue:
+
+- `Supplier`: maestro global reutilizable;
+- `TenderSupplier`: estado y contexto dentro de una licitación;
+- `SupplierContact`: correo, teléfono, WhatsApp o formulario con confianza y fuente;
+- `SupplierSource`: evidencia del hallazgo;
+- `ProductSupplierMatch`: score explicable por producto.
+
+### Configuración
+
+```text
+SMARTQUOTE_SUPPLIER_DIRECTORY_PATH=app/supplier_sources/default_directory.json
+SMARTQUOTE_SUPPLIER_SEARCH_COUNTRY=MX
+SMARTQUOTE_SUPPLIER_SEARCH_MAX_RESULTS_PER_PRODUCT=10
+SMARTQUOTE_SUPPLIER_MATCHING_ALGORITHM_VERSION=1.0.0
+```
+
+El worker debe escuchar también la cola `supplier-discovery`:
+
+```bash
+uv run celery -A app.infrastructure.tasks.celery_app:celery_app worker \
+  --loglevel=INFO \
+  --queues=document-processing,ai-extraction,supplier-discovery
+```
+
+### Endpoints
+
+| Método | Ruta |
+|---|---|
+| `POST` | `/api/v1/tenders/{id}/suppliers/discover` |
+| `GET` | `/api/v1/tenders/{id}/suppliers` |
+| `GET` | `/api/v1/suppliers/{id}` |
+| `PUT` | `/api/v1/suppliers/{id}` |
+| `POST` | `/api/v1/suppliers/{id}/approve` |
+| `POST` | `/api/v1/suppliers/{id}/reject` |
+| `POST` | `/api/v1/suppliers/merge` |
+| `POST` | `/api/v1/suppliers/manual` |
+
+Ejemplo:
+
+```bash
+curl -X POST http://localhost:8000/api/v1/tenders/TENDER_ID/suppliers/discover \
+  -H 'Content-Type: application/json' \
+  -d '{"requested_by_user_id":"00000000-0000-0000-0000-000000000001"}'
+
+curl http://localhost:8000/api/v1/tenders/TENDER_ID/suppliers
+
+curl -X POST http://localhost:8000/api/v1/suppliers/TENDER_SUPPLIER_ID/approve \
+  -H 'Content-Type: application/json' \
+  -d '{"reviewer_user_id":"00000000-0000-0000-0000-000000000001"}'
+```
+
+El matching es determinístico y pondera nombre (35), categoría (25), palabras clave (20) y especificaciones (20). La deduplicación prioriza dominio, correo y teléfono, y usa nombres como señales adicionales. Las coincidencias inciertas generan sugerencias de fusión para revisión.
+
+La documentación completa está en `docs/supplier-discovery.md`.
+
+Fuera de alcance: RFQs, envío de correos, monitoreo de respuestas y análisis de cotizaciones.

@@ -1,0 +1,4 @@
+{
+  "description": "Configure supplier records here or replace JsonDirectorySearchClient with an external provider client.",
+  "suppliers": []
+}

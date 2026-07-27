@@ -10,7 +10,7 @@ Environment = Literal["local", "test", "staging", "production"]
 
 class Settings(BaseSettings):
     project_name: str = Field(default="SmartQuote AI")
-    version: str = Field(default="0.3.0")
+    version: str = Field(default="0.4.0")
     environment: Environment = Field(default="local")
     api_v1_prefix: str = Field(default="/api/v1")
     database_url: SecretStr
@@ -42,6 +42,13 @@ class Settings(BaseSettings):
     ai_temperature: float = Field(default=0.0, ge=0, le=2)
     ai_input_cost_per_million_tokens: float = Field(default=0.0, ge=0)
     ai_output_cost_per_million_tokens: float = Field(default=0.0, ge=0)
+
+    supplier_directory_path: Path = Field(
+        default=Path("app/supplier_sources/default_directory.json")
+    )
+    supplier_search_country: str | None = Field(default="MX")
+    supplier_search_max_results_per_product: int = Field(default=10, ge=1, le=100)
+    supplier_matching_algorithm_version: str = Field(default="1.0.0")
 
     model_config = SettingsConfigDict(
         env_file=(".env", "../.env"),
