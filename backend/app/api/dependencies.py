@@ -2,9 +2,9 @@ from functools import lru_cache
 
 from app.application.ports.ai_extraction_queue import AIExtractionQueue
 from app.application.ports.attachment_provider import AttachmentProvider
+from app.application.ports.document_processing_queue import DocumentProcessingQueue
 from app.application.ports.email_composer import EmailComposer
 from app.application.ports.email_sender import EmailSender
-from app.application.ports.document_processing_queue import DocumentProcessingQueue
 from app.application.ports.file_storage import FileStorage
 from app.application.ports.prompt_registry import PromptRegistry
 from app.application.ports.rfq_delivery_queue import RfqDeliveryQueue

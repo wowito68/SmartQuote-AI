@@ -2,7 +2,6 @@ import hashlib
 import json
 import logging
 import time
-from datetime import datetime
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -19,6 +18,7 @@ from app.application.dtos.rfqs import (
     TenderRfqsResponse,
     UpdateRfqCommand,
 )
+from app.application.exceptions import TenderNotFound
 from app.application.ports.attachment_provider import AttachmentProvider
 from app.application.ports.email_composer import EmailComposer
 from app.application.ports.email_sender import EmailSender
@@ -35,7 +35,6 @@ from app.domain.rfqs.exceptions import (
 )
 from app.domain.rfqs.value_objects import OutboundLogResult, RfqStatus
 from app.domain.suppliers.value_objects import SupplierContactType, SupplierStatus
-from app.application.exceptions import TenderNotFound
 
 logger = logging.getLogger(__name__)
 
