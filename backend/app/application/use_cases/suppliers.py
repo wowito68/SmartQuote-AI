@@ -14,7 +14,10 @@ from app.application.dtos.suppliers import (
     TenderSuppliersResponse,
 )
 from app.application.exceptions import TenderNotFound
-from app.application.ports.supplier_search_service import SupplierContactSuggestion, SupplierSuggestion
+from app.application.ports.supplier_search_service import (
+    SupplierContactSuggestion,
+    SupplierSuggestion,
+)
 from app.application.ports.unit_of_work import UnitOfWorkFactory
 from app.application.services.supplier_deduplication import SupplierDeduplicationService
 from app.domain.suppliers.entities import (
@@ -34,7 +37,6 @@ from app.domain.suppliers.exceptions import (
 from app.domain.suppliers.value_objects import (
     MergeSuggestionStatus,
     SupplierConfidence,
-    SupplierContactType,
     SupplierMatchScore,
     SupplierStatus,
 )

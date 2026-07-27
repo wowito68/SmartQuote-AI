@@ -3,6 +3,13 @@ from uuid import UUID
 
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
+from tests.integration.test_ai_catalog_pipeline import (
+    FakeAIService,
+    RecordingAIQueue,
+    RecordingDocumentQueue,
+    create_ready_document,
+    valid_payload,
+)
 
 from app.api.dependencies import (
     get_ai_extraction_queue,
@@ -37,13 +44,6 @@ from app.infrastructure.db.session import SessionLocal
 from app.infrastructure.db.unit_of_work import SqlAlchemyUnitOfWork
 from app.infrastructure.prompts.file_prompt_registry import FilePromptRegistry
 from app.main import app
-from tests.integration.test_ai_catalog_pipeline import (
-    FakeAIService,
-    RecordingAIQueue,
-    RecordingDocumentQueue,
-    create_ready_document,
-    valid_payload,
-)
 
 SYSTEM_USER_ID = "00000000-0000-0000-0000-000000000001"
 
