@@ -192,7 +192,9 @@ def test_supplier_discovery_is_auditable_deduplicated_matched_and_idempotent() -
         assert all(item["sources"] for item in body["suppliers"])
         assert all(item["matches"] for item in body["suppliers"])
         conductor = next(
-            item for item in body["suppliers"] if item["normalized_domain"] == "conductores.example.mx"
+            item
+            for item in body["suppliers"]
+            if item["normalized_domain"] == "conductores.example.mx"
         )
         assert len(conductor["sources"]) == 2
         assert {item["contact_type"] for item in conductor["contacts"]} == {

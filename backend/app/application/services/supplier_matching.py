@@ -80,9 +80,13 @@ class SupplierMatchingService:
         name_score = round(name_similarity * 35, 4)
 
         category_similarity = _jaccard(_tokens(product_category), _tokens(supplier.category))
-        if product_category and supplier.category:
-            if product_category.casefold().strip() == supplier.category.casefold().strip():
-                category_similarity = 1.0
+        if (
+            product_category
+            and supplier.category
+            and product_category.casefold().strip()
+            == supplier.category.casefold().strip()
+        ):
+            category_similarity = 1.0
         category_score = round(category_similarity * 25, 4)
 
         product_keyword_text = " ".join(
