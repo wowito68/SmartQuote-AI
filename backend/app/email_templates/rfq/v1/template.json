@@ -1,0 +1,8 @@
+{
+  "name": "supplier_rfq",
+  "version": "1.0.0",
+  "content_type": "text/plain",
+  "description": "Solicitud de cotización para proveedores aprobados.",
+  "subject_template": "Solicitud de cotización {{ tender.title }} — respuesta antes del {{ response_deadline }}",
+  "body_template": "Estimado{% if contact.name %} {{ contact.name }}{% else %} equipo de {{ supplier.name }}{% endif %}:\n\nPor medio de la presente, {{ company.name }} solicita su cotización para los siguientes productos relacionados con la licitación {{ tender.title }}.\n\n{% for product in products %}{{ loop.index }}. {{ product.name }}\n   Cantidad: {{ product.quantity or 'Por confirmar' }} {{ product.unit or '' }}\n{% if product.description %}   Descripción: {{ product.description }}\n{% endif %}{% if product.specifications %}   Especificaciones:\n{% for key, value in product.specifications.items() %}   - {{ key }}: {{ value }}\n{% endfor %}{% endif %}{% if product.observations %}   Observaciones: {{ product.observations }}\n{% endif %}\n{% endfor %}Fecha límite para responder: {{ response_deadline }}.\n{% if observations %}\nObservaciones generales: {{ observations }}\n{% endif %}\nAgradecemos incluir vigencia de la oferta, tiempo de entrega, condiciones de pago, impuestos y costos de envío.\n\nAtentamente,\n{{ company.contact_name }}\n{{ company.name }}\n{{ company.email }}{% if company.phone %}\n{{ company.phone }}{% endif %}\n"
+}

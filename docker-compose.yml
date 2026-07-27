@@ -9,11 +9,17 @@ services:
       SMARTQUOTE_STORAGE_ROOT: /app/storage/private
       SMARTQUOTE_CELERY_BROKER_URL: redis://redis:6379/0
       SMARTQUOTE_CELERY_RESULT_BACKEND: redis://redis:6379/1
+      SMARTQUOTE_SMTP_HOST: mailpit
+      SMARTQUOTE_SMTP_PORT: 1025
+      SMARTQUOTE_SMTP_USE_TLS: "false"
+      SMARTQUOTE_SMTP_USE_SSL: "false"
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+      mailpit:
+        condition: service_started
     ports: ["8000:8000"]
     volumes: [document_storage:/app/storage/private]
     command: uv run uvicorn app.main:app --host 0.0.0.0 --port 8000
@@ -28,13 +34,23 @@ services:
       SMARTQUOTE_STORAGE_ROOT: /app/storage/private
       SMARTQUOTE_CELERY_BROKER_URL: redis://redis:6379/0
       SMARTQUOTE_CELERY_RESULT_BACKEND: redis://redis:6379/1
+      SMARTQUOTE_SMTP_HOST: mailpit
+      SMARTQUOTE_SMTP_PORT: 1025
+      SMARTQUOTE_SMTP_USE_TLS: "false"
+      SMARTQUOTE_SMTP_USE_SSL: "false"
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+      mailpit:
+        condition: service_started
     volumes: [document_storage:/app/storage/private]
-    command: uv run celery -A app.infrastructure.tasks.celery_app:celery_app worker --loglevel=INFO --queues=document-processing,ai-extraction,supplier-discovery --concurrency=2
+    command: >-
+      uv run celery -A app.infrastructure.tasks.celery_app:celery_app worker
+      --loglevel=INFO
+      --queues=document-processing,ai-extraction,supplier-discovery,rfq-delivery
+      --concurrency=2
 
   beat:
     build:
@@ -77,6 +93,10 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+
+  mailpit:
+    image: axllent/mailpit:v1.27
+    ports: ["8025:8025", "1025:1025"]
 
 volumes:
   postgres_data:

@@ -385,3 +385,96 @@ El matching es determinístico y pondera nombre (35), categoría (25), palabras 
 La documentación completa está en `docs/supplier-discovery.md`.
 
 Fuera de alcance: RFQs, envío de correos, monitoreo de respuestas y análisis de cotizaciones.
+
+## Iteración 8: generación y envío de RFQs
+
+La Iteración 8 toma el último catálogo aprobado y los proveedores aprobados de una licitación para generar solicitudes de cotización revisables. La RFQ de negocio permanece separada de cada intento de correo; el dominio depende de puertos y nunca conoce SMTP.
+
+### Flujo
+
+```mermaid
+flowchart LR
+    A[Approved Suppliers] --> B[RFQ Generation]
+    B --> C[Draft Review]
+    C --> D[Approved and Frozen]
+    D --> E[Queued]
+    E --> F[Sending]
+    F --> G[Sent]
+    F --> H[Failed]
+    H --> E
+```
+
+### Configuración SMTP y empresa
+
+```text
+SMARTQUOTE_COMPANY_NAME=SmartQuote AI
+SMARTQUOTE_COMPANY_CONTACT_NAME=Equipo de Compras
+SMARTQUOTE_COMPANY_EMAIL=procurement@smartquote.local
+SMARTQUOTE_RFQ_TEMPLATE_NAME=supplier_rfq
+SMARTQUOTE_RFQ_TEMPLATE_VERSION=1.0.0
+SMARTQUOTE_MAX_EMAIL_ATTACHMENT_BYTES=26214400
+SMARTQUOTE_SMTP_HOST=mailpit
+SMARTQUOTE_SMTP_PORT=1025
+SMARTQUOTE_SMTP_USE_TLS=false
+SMARTQUOTE_SMTP_USE_SSL=false
+SMARTQUOTE_SMTP_SENDER_EMAIL=procurement@smartquote.local
+SMARTQUOTE_SMTP_SENDER_NAME=SmartQuote AI Compras
+SMARTQUOTE_SMTP_MESSAGE_ID_DOMAIN=smartquote.local
+```
+
+El worker debe escuchar también `rfq-delivery`:
+
+```bash
+uv run celery -A app.infrastructure.tasks.celery_app:celery_app worker \
+  --loglevel=INFO \
+  --queues=document-processing,ai-extraction,supplier-discovery,rfq-delivery
+```
+
+Docker Compose incluye Mailpit para desarrollo. Su interfaz se abre en `http://localhost:8025` y recibe SMTP en el puerto `1025`.
+
+### Endpoints
+
+| Método | Ruta |
+|---|---|
+| `POST` | `/api/v1/tenders/{id}/rfqs/generate` |
+| `GET` | `/api/v1/tenders/{id}/rfqs` |
+| `GET` | `/api/v1/rfqs/{id}` |
+| `PUT` | `/api/v1/rfqs/{id}` |
+| `POST` | `/api/v1/rfqs/{id}/approve` |
+| `POST` | `/api/v1/rfqs/{id}/cancel` |
+| `POST` | `/api/v1/rfqs/{id}/send` |
+| `GET` | `/api/v1/rfqs/{id}/messages` |
+
+Ejemplo mínimo:
+
+```bash
+curl -X POST http://localhost:8000/api/v1/tenders/TENDER_ID/rfqs/generate \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "generated_by_user_id":"00000000-0000-0000-0000-000000000001",
+    "response_deadline":"2026-08-15T18:00:00-06:00",
+    "observations":"Indicar vigencia, entrega e impuestos"
+  }'
+
+curl -X PUT http://localhost:8000/api/v1/rfqs/RFQ_ID \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "changed_by_user_id":"00000000-0000-0000-0000-000000000001",
+    "to_recipients":["ventas@proveedor.example","cotizaciones@proveedor.example"],
+    "subject":"Solicitud de cotización — entrega prioritaria"
+  }'
+
+curl -X POST http://localhost:8000/api/v1/rfqs/RFQ_ID/approve \
+  -H 'Content-Type: application/json' \
+  -d '{"approved_by_user_id":"00000000-0000-0000-0000-000000000001"}'
+
+curl -X POST http://localhost:8000/api/v1/rfqs/RFQ_ID/send \
+  -H 'Content-Type: application/json' \
+  -d '{"requested_by_user_id":"00000000-0000-0000-0000-000000000001"}'
+```
+
+La plantilla inicial está versionada en `backend/app/email_templates/rfq/v1/template.json`. Los adjuntos conservan nombre, SHA-256, tamaño y MIME, y se validan nuevamente antes de SMTP. Al aprobar, contenido, destinatarios y adjuntos quedan congelados. La idempotencia considera `rfq_id`, versión y el contenido aprobado; un reintento usa la misma RFQ y crea un nuevo intento de mensaje.
+
+La documentación técnica completa está en `docs/rfq.md`.
+
+Fuera de alcance: monitoreo automático del buzón, lectura de respuestas, análisis de cotizaciones y comparativos.

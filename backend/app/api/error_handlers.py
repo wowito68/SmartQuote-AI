@@ -29,6 +29,16 @@ from app.domain.documents.exceptions import (
     InvalidDocumentState,
     TooManyDocuments,
 )
+from app.domain.rfqs.exceptions import (
+    AttachmentValidationError,
+    DuplicateRfqSend,
+    EmailCompositionError,
+    EmailDeliveryError,
+    EmailTemplateNotFound,
+    InvalidRfqState,
+    RfqGenerationError,
+    RfqNotFound,
+)
 from app.domain.shared.exceptions import ValidationError
 from app.domain.suppliers.exceptions import (
     InvalidSupplierDiscoveryState,
@@ -147,6 +157,18 @@ def register_exception_handlers(app: FastAPI) -> None:
             status.HTTP_503_SERVICE_UNAVAILABLE,
             "supplier_queue_unavailable",
         ),
+        (RfqNotFound, status.HTTP_404_NOT_FOUND, "rfq_not_found"),
+        (InvalidRfqState, status.HTTP_409_CONFLICT, "invalid_rfq_state"),
+        (DuplicateRfqSend, status.HTTP_409_CONFLICT, "duplicate_rfq_send"),
+        (RfqGenerationError, status.HTTP_409_CONFLICT, "rfq_generation_error"),
+        (
+            AttachmentValidationError,
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "rfq_attachment_invalid",
+        ),
+        (EmailTemplateNotFound, status.HTTP_503_SERVICE_UNAVAILABLE, "email_template_not_found"),
+        (EmailCompositionError, status.HTTP_503_SERVICE_UNAVAILABLE, "email_composition_failed"),
+        (EmailDeliveryError, status.HTTP_503_SERVICE_UNAVAILABLE, "email_delivery_failed"),
         (ValidationError, status.HTTP_422_UNPROCESSABLE_CONTENT, "validation_error"),
     ]
 

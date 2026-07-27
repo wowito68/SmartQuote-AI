@@ -10,7 +10,7 @@ Environment = Literal["local", "test", "staging", "production"]
 
 class Settings(BaseSettings):
     project_name: str = Field(default="SmartQuote AI")
-    version: str = Field(default="0.4.0")
+    version: str = Field(default="0.5.0")
     environment: Environment = Field(default="local")
     api_v1_prefix: str = Field(default="/api/v1")
     database_url: SecretStr
@@ -49,6 +49,24 @@ class Settings(BaseSettings):
     supplier_search_country: str | None = Field(default="MX")
     supplier_search_max_results_per_product: int = Field(default=10, ge=1, le=100)
     supplier_matching_algorithm_version: str = Field(default="1.0.0")
+
+    company_name: str = Field(default="SmartQuote AI")
+    company_contact_name: str = Field(default="Equipo de Compras")
+    company_email: str = Field(default="procurement@smartquote.local")
+    company_phone: str | None = Field(default=None)
+    rfq_template_name: str = Field(default="supplier_rfq")
+    rfq_template_version: str = Field(default="1.0.0")
+    max_email_attachment_bytes: int = Field(default=25 * 1024 * 1024, gt=0)
+    smtp_host: str = Field(default="localhost")
+    smtp_port: int = Field(default=1025, ge=1, le=65535)
+    smtp_username: str | None = Field(default=None)
+    smtp_password: SecretStr | None = Field(default=None)
+    smtp_use_tls: bool = Field(default=False)
+    smtp_use_ssl: bool = Field(default=False)
+    smtp_timeout_seconds: float = Field(default=30.0, gt=0, le=300)
+    smtp_sender_email: str = Field(default="procurement@smartquote.local")
+    smtp_sender_name: str = Field(default="SmartQuote AI Compras")
+    smtp_message_id_domain: str = Field(default="smartquote.local")
 
     model_config = SettingsConfigDict(
         env_file=(".env", "../.env"),

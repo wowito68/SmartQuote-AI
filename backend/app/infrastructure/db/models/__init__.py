@@ -12,6 +12,12 @@ from app.infrastructure.db.models.document_processing import (
     DocumentQualityModel,
     ExtractionRunModel,
 )
+from app.infrastructure.db.models.rfq import (
+    EmailAttachmentModel,
+    EmailMessageModel,
+    OutboundMessageLogModel,
+    RfqRequestModel,
+)
 from app.infrastructure.db.models.supplier import (
     ProductSupplierMatchModel,
     SupplierContactModel,
@@ -31,11 +37,15 @@ __all__ = [
     "CatalogProductRevisionModel",
     "CatalogSnapshotModel",
     "EvidenceReferenceModel",
+    "EmailAttachmentModel",
+    "EmailMessageModel",
     "ExtractedEvidenceModel",
     "DocumentPageModel",
     "DocumentQualityModel",
     "ExtractionRunModel",
+    "OutboundMessageLogModel",
     "ProductSupplierMatchModel",
+    "RfqRequestModel",
     "SupplierContactModel",
     "SupplierDiscoveryRunModel",
     "SupplierMergeSuggestionModel",

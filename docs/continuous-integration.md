@@ -24,3 +24,7 @@ El contrato OpenAPI verifica los cinco endpoints de catálogo y la cobertura mí
 El contrato OpenAPI incluye los ocho endpoints de proveedores. La suite de integración valida el pipeline completo con un proveedor de búsqueda determinístico y un worker Celery real conectado a Redis. No se realizan búsquedas web ni llamadas externas durante CI.
 
 Además se cubren persistencia de maestros globales, asociaciones por licitación, contactos, fuentes, matching, deduplicación, idempotencia, aprobación, rechazo, creación manual y fusión. El umbral global de cobertura continúa en 90%.
+
+## Cobertura de la Iteración 8
+
+El contrato OpenAPI valida también los ocho endpoints RFQ. Las pruebas de integración usan un `EmailSender` determinístico para no depender de credenciales ni entregar correos reales, mientras Docker construye el adaptador SMTP y Compose ofrece Mailpit para pruebas manuales. El workflow mantiene PostgreSQL 16, Redis 7, ciclo completo de Alembic, cobertura mínima de 90%, Ruff y compilación.
