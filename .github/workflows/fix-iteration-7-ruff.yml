@@ -25,17 +25,25 @@ jobs:
           enable-cache: true
       - working-directory: backend
         run: uv sync --frozen
-      - name: Apply Ruff fixes
+      - name: Apply Ruff fixes and capture remaining findings
         working-directory: backend
         run: |
-          uv run ruff check . --fix --unsafe-fixes
-          uv run ruff check .
-      - name: Commit Ruff fixes
+          uv run ruff check . --fix --unsafe-fixes || true
+          uv run ruff check . --output-format=concise > /tmp/ruff-report.txt 2>&1 || true
+      - name: Commit automatic Ruff fixes
         run: |
           git checkout HEAD -- .github/workflows/fix-iteration-7-ruff.yml
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add backend
-          if git diff --cached --quiet; then exit 0; fi
-          git commit -m 'Apply Ruff fixes for Iteration 7'
-          git push origin HEAD:agent/iteration-7-supplier-discovery
+          if ! git diff --cached --quiet; then
+            git commit -m 'Apply Ruff fixes for Iteration 7'
+            git push origin HEAD:agent/iteration-7-supplier-discovery
+          fi
+      - name: Upload Ruff report
+        uses: actions/upload-artifact@v4
+        with:
+          name: iteration-7-ruff-report
+          path: /tmp/ruff-report.txt
+          if-no-files-found: error
+          retention-days: 1
