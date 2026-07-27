@@ -1,0 +1,49 @@
+name: Fix Iteration 8 Ruff
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    if: >-
+      github.event.pull_request.head.ref == 'agent/iteration-8-rfq-email-delivery' &&
+      github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/iteration-8-rfq-email-delivery
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: '3.12'
+          enable-cache: true
+      - working-directory: backend
+        run: uv sync --frozen
+      - name: Apply Ruff fixes and capture remaining findings
+        working-directory: backend
+        run: |
+          uv run ruff check . --fix --unsafe-fixes || true
+          uv run ruff check . --output-format=concise > /tmp/ruff-report.txt 2>&1 || true
+      - name: Commit automatic Ruff fixes
+        run: |
+          git checkout HEAD -- .github/workflows/fix-iteration-8-ruff.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add backend
+          if ! git diff --cached --quiet; then
+            git commit -m 'Apply Ruff fixes for Iteration 8'
+            git push origin HEAD:agent/iteration-8-rfq-email-delivery
+          fi
+      - name: Upload Ruff report
+        uses: actions/upload-artifact@v4
+        with:
+          name: iteration-8-ruff-report
+          path: /tmp/ruff-report.txt
+          if-no-files-found: error
+          retention-days: 1
