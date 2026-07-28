@@ -1,6 +1,57 @@
 # SmartQuote AI
 
-Backend para administrar licitaciones, almacenar documentos privados y extraer texto de PDFs mediante un pipeline asíncrono auditable.
+Plataforma para administrar licitaciones, almacenar documentos privados, extraer
+catálogos con IA, gestionar proveedores y enviar RFQs mediante un pipeline
+asíncrono auditable.
+
+## Frontend
+
+La aplicación web está en `frontend/` y ofrece un dashboard operativo para:
+
+- crear y revisar licitaciones;
+- cargar documentos PDF;
+- solicitar extracción de catálogo;
+- aprobar o rechazar productos;
+- agregar, buscar, aprobar o rechazar proveedores;
+- generar, aprobar y enviar RFQs;
+- consultar el estado general del sistema.
+
+Instalación:
+
+```bash
+cd frontend
+npm install
+```
+
+Ejecución local:
+
+```bash
+cd frontend
+npm run dev
+```
+
+URL:
+
+```text
+http://127.0.0.1:5173
+```
+
+Durante desarrollo, Vite redirige `/api` y `/health` hacia
+`http://127.0.0.1:8001`. Si el backend se ejecuta en otra URL, configura:
+
+```bash
+VITE_API_BASE_URL=http://127.0.0.1:8001 npm run dev
+```
+
+Build de producción:
+
+```bash
+cd frontend
+npm run build
+```
+
+La UI usa el usuario operativo por defecto
+`00000000-0000-0000-0000-000000000001`, editable desde la barra lateral.
 
 ## Alcance actual
 

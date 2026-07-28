@@ -1,0 +1,62 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --sq-color-navy: #0b1220;
+  --sq-color-sidebar: #111827;
+  --sq-color-action: #0f766e;
+  --sq-color-action-hover: #115e59;
+  --sq-color-bg: #f5f7fb;
+  --sq-color-surface: #ffffff;
+  --sq-color-surface-muted: #f8fafc;
+  --sq-color-border: #e2e8f0;
+  --sq-color-text: #111827;
+  --sq-color-muted: #64748b;
+  --sq-radius-sm: 0.375rem;
+  --sq-radius-md: 0.5rem;
+  --sq-radius-lg: 0.75rem;
+  --sq-shadow-panel: 0 1px 2px rgba(15, 23, 42, 0.08);
+  color: var(--sq-color-text);
+  background: var(--sq-color-bg);
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  overflow-x: hidden;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--sq-color-action);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}
