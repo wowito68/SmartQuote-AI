@@ -13,6 +13,7 @@ from app.infrastructure.db.repositories.document_processing_repository import (
 from app.infrastructure.db.repositories.document_repository import (
     SqlAlchemyTenderDocumentRepository,
 )
+from app.infrastructure.db.repositories.rfq_repository import SqlAlchemyRfqRepository
 from app.infrastructure.db.repositories.supplier_repository import (
     SqlAlchemySupplierRepository,
 )
@@ -34,6 +35,7 @@ class SqlAlchemyUnitOfWork(UnitOfWork):
         self.audit_events = SqlAlchemyAuditEventRepository(self._session)
         self.catalogs = SqlAlchemyCatalogRepository(self._session)
         self.suppliers = SqlAlchemySupplierRepository(self._session)
+        self.rfqs = SqlAlchemyRfqRepository(self._session)
         self.users = SqlAlchemyUserLookup(self._session)
         return self
 

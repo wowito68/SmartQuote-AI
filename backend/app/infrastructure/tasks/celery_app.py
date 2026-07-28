@@ -12,6 +12,7 @@ celery_app = Celery(
         "app.infrastructure.tasks.document_pipeline",
         "app.infrastructure.tasks.catalog_extraction",
         "app.infrastructure.tasks.supplier_discovery",
+        "app.infrastructure.tasks.rfq_delivery",
     ],
 )
 celery_app.conf.update(
@@ -28,6 +29,7 @@ celery_app.conf.update(
         "smartquote.documents.*": {"queue": "document-processing"},
         "smartquote.catalog.*": {"queue": "ai-extraction"},
         "smartquote.suppliers.*": {"queue": "supplier-discovery"},
+        "smartquote.rfqs.*": {"queue": "rfq-delivery"},
     },
     task_always_eager=settings.celery_task_always_eager,
     task_eager_propagates=True,
