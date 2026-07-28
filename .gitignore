@@ -24,6 +24,12 @@ env/
 dist/
 build/
 *.egg-info/
+node_modules/
+frontend/dist/
+frontend/screenshots/
+*.tsbuildinfo
+frontend/vite.config.js
+frontend/vite.config.d.ts
 
 # IDEs
 .idea/
@@ -36,4 +42,3 @@ Thumbs.db
 # Local application data
 storage/
 logs/
-
