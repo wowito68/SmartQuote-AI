@@ -31,6 +31,7 @@ from app.application.use_cases.quotes import (
     UploadSupplierQuote,
 )
 from app.config.settings import Settings, get_settings
+from app.domain.documents.exceptions import InvalidDocumentFile
 
 router = APIRouter(tags=["quotes"])
 UowFactoryDependency = Annotated[UnitOfWorkFactory, Depends(get_uow_factory)]
@@ -90,7 +91,7 @@ async def upload_supplier_quote(
         maximum_files=1,
     )
     if len(uploads) != 1:
-        raise ValueError("Exactly one quote PDF is required.")
+        raise InvalidDocumentFile("Exactly one quote PDF is required.")
     result = UploadSupplierQuote(
         uow_factory,
         file_storage,
