@@ -13,6 +13,7 @@ from app.application.ports.supplier_search_service import (
     SupplierSuggestion,
 )
 from app.application.services.supplier_normalization import normalize_http_url
+from app.application.services.supplier_query_builder import SupplierQueryBuilder
 from app.domain.suppliers.exceptions import SupplierSearchFailure
 
 _TOKEN_PATTERN = re.compile(r"[a-z0-9]+", re.IGNORECASE)
@@ -179,7 +180,13 @@ class SearchProviderAdapter(SupplierSearchService):
     def search(self, request: SupplierSearchRequest) -> SupplierSearchResponse:
         query = request.query.strip()
         if not query:
-            raise SupplierSearchFailure("Supplier search request requires a deterministic query.")
+            query = SupplierQueryBuilder(request.query_version).build(
+                request.product,
+                country=request.country,
+                city=request.city,
+            ).text
+        if not query:
+            raise SupplierSearchFailure("Supplier search request produced an empty query.")
         try:
             records = self._client.search(
                 query=query,
