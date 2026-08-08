@@ -28,8 +28,8 @@ from app.application.use_cases.quotes import (
     GetTenderComparison,
     ListTenderQuotes,
     ReviewQuote,
-    UploadSupplierQuote,
 )
+from app.application.use_cases.tender_workflow import UploadSupplierQuoteWorkflow
 from app.config.settings import Settings, get_settings
 from app.domain.documents.exceptions import InvalidDocumentFile
 
@@ -95,7 +95,7 @@ async def upload_supplier_quote(
     )
     if len(uploads) != 1:
         raise InvalidDocumentFile("Exactly one quote PDF is required.")
-    result = UploadSupplierQuote(
+    result = UploadSupplierQuoteWorkflow(
         uow_factory,
         file_storage,
         queue,
