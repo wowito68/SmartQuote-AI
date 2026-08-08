@@ -16,33 +16,39 @@ branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
 
+def _replace_check_constraint(table: str, name: str, condition: str) -> None:
+    if op.get_bind().dialect.name == "sqlite":
+        with op.batch_alter_table(table, recreate="always") as batch_op:
+            batch_op.drop_constraint(name, type_="check")
+            batch_op.create_check_constraint(name, condition)
+        return
+    op.drop_constraint(name, table, type_="check")
+    op.create_check_constraint(name, table, condition)
+
+
 def _expand_state_constraints() -> None:
-    op.drop_constraint("valid_tender_status", "tenders", type_="check")
-    op.create_check_constraint(
-        "valid_tender_status",
+    _replace_check_constraint(
         "tenders",
+        "valid_tender_status",
         "status IN ('draft', 'documents_pending', 'documents_processing', 'catalog_review', "
         "'supplier_review', 'rfq_ready', 'waiting_quotes', 'quote_analysis', "
         "'comparison_ready', 'awarded', 'cancelled', 'closed')",
     )
-    op.drop_constraint("valid_catalog_product_status", "catalog_products", type_="check")
-    op.create_check_constraint(
-        "valid_catalog_product_status",
+    _replace_check_constraint(
         "catalog_products",
+        "valid_catalog_product_status",
         "status IN ('candidate', 'normalized', 'pending_review', 'approved', 'rejected', "
         "'quoted', 'compared')",
     )
-    op.drop_constraint("valid_tender_supplier_status", "tender_suppliers", type_="check")
-    op.create_check_constraint(
-        "valid_tender_supplier_status",
+    _replace_check_constraint(
         "tender_suppliers",
+        "valid_tender_supplier_status",
         "status IN ('candidate', 'contacts_found', 'pending_review', 'approved', 'rejected', "
         "'merged', 'contacted', 'responded', 'inactive')",
     )
-    op.drop_constraint("valid_rfq_status", "rfq_requests", type_="check")
-    op.create_check_constraint(
-        "valid_rfq_status",
+    _replace_check_constraint(
         "rfq_requests",
+        "valid_rfq_status",
         "status IN ('draft', 'pending_review', 'approved', 'queued', 'sending', 'sent', "
         "'delivered', 'responded', 'failed', 'cancelled')",
     )
@@ -217,29 +223,25 @@ def downgrade() -> None:
     op.drop_index("ix_quotes_tender_id", table_name="quotes")
     op.drop_table("quotes")
 
-    op.drop_constraint("valid_rfq_status", "rfq_requests", type_="check")
-    op.create_check_constraint(
-        "valid_rfq_status",
+    _replace_check_constraint(
         "rfq_requests",
+        "valid_rfq_status",
         "status IN ('draft', 'pending_review', 'approved', 'queued', 'sending', 'sent', "
         "'delivered', 'failed', 'cancelled')",
     )
-    op.drop_constraint("valid_tender_supplier_status", "tender_suppliers", type_="check")
-    op.create_check_constraint(
-        "valid_tender_supplier_status",
+    _replace_check_constraint(
         "tender_suppliers",
+        "valid_tender_supplier_status",
         "status IN ('candidate', 'contacts_found', 'pending_review', 'approved', 'rejected', 'merged')",
     )
-    op.drop_constraint("valid_catalog_product_status", "catalog_products", type_="check")
-    op.create_check_constraint(
-        "valid_catalog_product_status",
+    _replace_check_constraint(
         "catalog_products",
+        "valid_catalog_product_status",
         "status IN ('candidate', 'normalized', 'pending_review', 'approved', 'rejected')",
     )
-    op.drop_constraint("valid_tender_status", "tenders", type_="check")
-    op.create_check_constraint(
-        "valid_tender_status",
+    _replace_check_constraint(
         "tenders",
+        "valid_tender_status",
         "status IN ('draft', 'documents_pending', 'documents_processing', 'catalog_review', "
         "'cancelled', 'closed')",
     )
