@@ -116,7 +116,9 @@ def _decimal(value: object) -> Decimal | None:
     try:
         result = Decimal(str(value))
     except (InvalidOperation, TypeError, ValueError) as exc:
-        raise QuoteExtractionFailure("AI quote response contains an invalid numeric value.") from exc
+        raise QuoteExtractionFailure(
+            "AI quote response contains an invalid numeric value."
+        ) from exc
     if not result.is_finite() or result < 0:
         raise QuoteExtractionFailure("AI quote response contains an invalid numeric value.")
     return result
@@ -147,7 +149,13 @@ def _match_catalog_product(snapshot_products: tuple[dict, ...], name: str) -> UU
     return None
 
 
-def _advance_to_quote_analysis(tender, *, catalog_ready: bool, supplier_ready: bool, rfq_sent: bool) -> None:
+def _advance_to_quote_analysis(
+    tender,
+    *,
+    catalog_ready: bool,
+    supplier_ready: bool,
+    rfq_sent: bool,
+) -> None:
     if tender.status is TenderStatus.CATALOG_REVIEW and catalog_ready:
         tender.change_status(TenderStatus.SUPPLIER_REVIEW)
     if tender.status is TenderStatus.SUPPLIER_REVIEW and supplier_ready:
@@ -204,10 +212,16 @@ class UploadSupplierQuote:
             if uow.quotes.find_duplicate(
                 command.tender_id, tender_supplier.supplier_id, validated.file_hash.value
             ):
-                raise DuplicateQuote("The same supplier quote is already registered for this tender.")
+                raise DuplicateQuote(
+                    "The same supplier quote is already registered for this tender."
+                )
             quote_id = uuid4()
             try:
-                storage_key = self._file_storage.store(command.tender_id, quote_id, validated.content)
+                storage_key = self._file_storage.store(
+                    command.tender_id,
+                    quote_id,
+                    validated.content,
+                )
                 quote = Quote(
                     id=quote_id,
                     tender_id=command.tender_id,
@@ -397,7 +411,9 @@ class ProcessSupplierQuote:
                     page = int(evidence.get("page") or 0)
                     fragment = " ".join(str(evidence.get("fragment") or "").split())
                     if page not in page_text or not fragment or fragment not in page_text[page]:
-                        raise QuoteExtractionFailure("Quote evidence is not grounded in its source page.")
+                        raise QuoteExtractionFailure(
+                            "Quote evidence is not grounded in its source page."
+                        )
                     items.append(
                         QuoteItem(
                             quote_id=current.id,
