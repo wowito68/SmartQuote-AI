@@ -49,7 +49,9 @@ class SynchronizeTenderForQuoteAnalysis:
                     "Tender documents must be fully processed before supplier quotes."
                 )
             if uow.catalogs.get_latest_snapshot(tender_id) is None:
-                raise InvalidQuoteState("Tender requires an approved catalog before supplier quotes.")
+                raise InvalidQuoteState(
+                    "Tender requires an approved catalog before supplier quotes."
+                )
 
             tender_supplier = uow.suppliers.get_tender_supplier(tender_supplier_id)
             if tender_supplier is None or tender_supplier.tender_id != tender_id:
