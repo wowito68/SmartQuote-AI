@@ -13,9 +13,18 @@ class JsonFormatter(logging.Formatter):
             "message": record.getMessage(),
         }
         for key in (
+            "correlation_id",
+            "tender_id",
             "document_id",
+            "quote_id",
+            "rfq_id",
+            "supplier_id",
+            "message_id",
             "extraction_run_id",
+            "ai_extraction_run_id",
             "extractor_name",
+            "model",
+            "prompt_version",
             "duration_ms",
             "page_number",
             "document_status",
@@ -26,6 +35,8 @@ class JsonFormatter(logging.Formatter):
             "text_density",
             "quality_decision",
             "pending_count",
+            "attempt",
+            "provider",
         ):
             value = getattr(record, key, None)
             if value is not None:

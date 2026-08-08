@@ -46,12 +46,11 @@ class OpenAIResponsesHTTPClient:
             with urllib.request.urlopen(request, timeout=self._timeout) as response:
                 payload = json.loads(response.read().decode("utf-8"))
         except urllib.error.HTTPError as exc:
-            details = exc.read().decode("utf-8", errors="replace")[:4000]
             raise AIExtractionFailure(
-                f"OpenAI Responses API returned HTTP {exc.code}: {details}"
+                f"OpenAI Responses API returned HTTP {exc.code}."
             ) from exc
         except (urllib.error.URLError, TimeoutError) as exc:
-            raise AIExtractionFailure(f"OpenAI Responses API is unavailable: {exc}") from exc
+            raise AIExtractionFailure("OpenAI Responses API is unavailable.") from exc
         output_text = ""
         for item in payload.get("output", []):
             if item.get("type") != "message":
@@ -105,7 +104,7 @@ class OpenAIExtractionService(AIExtractionService):
                 text={
                     "format": {
                         "type": "json_schema",
-                        "name": "tender_catalog_extraction",
+                        "name": request.prompt.name,
                         "description": request.prompt.description,
                         "schema": request.prompt.output_schema,
                         "strict": True,
@@ -114,7 +113,9 @@ class OpenAIExtractionService(AIExtractionService):
                 store=False,
             )
         except Exception as exc:
-            raise AIExtractionFailure(f"OpenAI extraction request failed: {exc}") from exc
+            if isinstance(exc, AIExtractionFailure):
+                raise
+            raise AIExtractionFailure("OpenAI extraction request failed.") from exc
         duration_ms = int((time.perf_counter() - started) * 1000)
         output_text = getattr(response, "output_text", None)
         if not output_text:

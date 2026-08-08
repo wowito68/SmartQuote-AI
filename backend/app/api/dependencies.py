@@ -7,6 +7,7 @@ from app.application.ports.email_composer import EmailComposer
 from app.application.ports.email_sender import EmailSender
 from app.application.ports.file_storage import FileStorage
 from app.application.ports.prompt_registry import PromptRegistry
+from app.application.ports.quote_analysis_queue import QuoteAnalysisQueue
 from app.application.ports.rfq_delivery_queue import RfqDeliveryQueue
 from app.application.ports.supplier_discovery_queue import SupplierDiscoveryQueue
 from app.application.ports.supplier_search_service import SupplierSearchService
@@ -27,6 +28,7 @@ from app.infrastructure.search.search_provider_adapter import (
 from app.infrastructure.storage.local_file_storage import LocalFileStorage
 from app.infrastructure.tasks.ai_extraction_queue import CeleryAIExtractionQueue
 from app.infrastructure.tasks.processing_queue import CeleryDocumentProcessingQueue
+from app.infrastructure.tasks.quote_analysis_queue import CeleryQuoteAnalysisQueue
 from app.infrastructure.tasks.rfq_delivery_queue import CeleryRfqDeliveryQueue
 from app.infrastructure.tasks.supplier_discovery_queue import (
     CelerySupplierDiscoveryQueue,
@@ -105,3 +107,8 @@ def get_email_sender() -> EmailSender:
 @lru_cache
 def get_rfq_delivery_queue() -> RfqDeliveryQueue:
     return CeleryRfqDeliveryQueue()
+
+
+@lru_cache
+def get_quote_analysis_queue() -> QuoteAnalysisQueue:
+    return CeleryQuoteAnalysisQueue()

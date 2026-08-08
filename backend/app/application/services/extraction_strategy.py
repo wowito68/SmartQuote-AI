@@ -35,6 +35,14 @@ class FallbackDocumentTextExtractor:
         self.policy = policy
 
     @property
+    def name(self) -> str:
+        return "fallback"
+
+    @property
+    def version(self) -> str:
+        return self.strategy_version
+
+    @property
     def strategy_version(self) -> str:
         return (
             f"{self.primary.name}:{self.primary.version}|"

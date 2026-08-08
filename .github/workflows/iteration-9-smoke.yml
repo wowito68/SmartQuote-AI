@@ -1,0 +1,97 @@
+name: Iteration 9 smoke
+
+on:
+  push:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  compose-smoke:
+    name: Docker Compose health and readiness
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate Compose configuration
+        run: docker compose config --quiet
+      - name: Build application services
+        run: docker compose build api worker
+      - name: Start dependencies
+        run: docker compose up -d postgres redis mailpit
+      - name: Apply migrations in the API image
+        run: docker compose run --rm api uv run alembic upgrade head
+      - name: Start API and worker
+        run: docker compose up -d api worker
+      - name: Verify liveness and readiness
+        run: |
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://localhost:8000/health >/tmp/health.json \
+              && curl --fail --silent http://localhost:8000/ready >/tmp/ready.json; then
+              cat /tmp/health.json
+              cat /tmp/ready.json
+              exit 0
+            fi
+            sleep 2
+          done
+          docker compose logs api worker postgres redis
+          exit 1
+      - name: Verify quote-analysis queue is configured
+        run: |
+          docker compose config | grep --fixed-strings 'quote-analysis'
+          docker compose ps --status running api worker postgres redis
+      - name: Stop Compose stack
+        if: always()
+        run: docker compose down --volumes --remove-orphans
+
+  repository-safety:
+    name: Secrets, diff and critical TODO checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Reject whitespace errors
+        run: git diff --check origin/main...HEAD
+      - name: Reject secrets in tracked source
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          import subprocess
+
+          patterns = [
+              re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----"),
+              re.compile(r"\bsk-[A-Za-z0-9_-]{20,}\b"),
+              re.compile(r"\bgh[pousr]_[A-Za-z0-9]{30,}\b"),
+          ]
+          allowed_suffixes = {".py", ".toml", ".yml", ".yaml", ".md", ".json", ".txt", ".example"}
+          tracked = subprocess.check_output(["git", "ls-files"], text=True).splitlines()
+          findings = []
+          for name in tracked:
+              path = Path(name)
+              if path.suffix not in allowed_suffixes and path.name != ".env.example":
+                  continue
+              try:
+                  text = path.read_text(encoding="utf-8")
+              except (UnicodeDecodeError, OSError):
+                  continue
+              for pattern in patterns:
+                  if pattern.search(text):
+                      findings.append(f"{name}: {pattern.pattern}")
+          if findings:
+              raise SystemExit("Potential secrets found:\n" + "\n".join(findings))
+          PY
+      - name: Reject newly introduced critical TODO markers
+        run: |
+          if git diff origin/main...HEAD --unified=0 -- backend/app backend/alembic \
+            | grep '^+' \
+            | grep -v '^+++' \
+            | grep -E 'TODO|FIXME|HACK'; then
+            echo 'New critical TODO/FIXME/HACK marker detected.'
+            exit 1
+          fi

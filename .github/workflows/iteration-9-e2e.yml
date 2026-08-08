@@ -1,0 +1,68 @@
+name: Iteration 9 quote E2E
+
+on:
+  push:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  quote-comparison-e2e:
+    name: Quote comparison end-to-end
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: smartquote
+          POSTGRES_PASSWORD: smartquote
+          POSTGRES_DB: smartquote
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U smartquote -d smartquote"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      SMARTQUOTE_DATABASE_URL: postgresql+psycopg://smartquote:smartquote@localhost:5432/smartquote
+      SMARTQUOTE_STORAGE_ROOT: /tmp/smartquote-iteration9-e2e-storage
+      SMARTQUOTE_CELERY_BROKER_URL: redis://localhost:6379/0
+      SMARTQUOTE_CELERY_RESULT_BACKEND: redis://localhost:6379/1
+      SMARTQUOTE_CELERY_TASK_ALWAYS_EAGER: "false"
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+          enable-cache: true
+      - run: uv sync --frozen
+      - run: uv run alembic upgrade head
+      - name: Run Iteration 9 integration tests
+        run: >-
+          uv run pytest
+          tests/integration/test_quote_comparison_pipeline.py
+          tests/integration/test_comparison_guards.py
+          -q --junitxml=iteration9-junit.xml
+      - name: Upload JUnit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: iteration9-junit-${{ github.sha }}
+          path: backend/iteration9-junit.xml
+          if-no-files-found: warn
+          retention-days: 14

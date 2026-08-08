@@ -29,6 +29,16 @@ from app.domain.documents.exceptions import (
     InvalidDocumentState,
     TooManyDocuments,
 )
+from app.domain.quotes.exceptions import (
+    ComparisonNotFound,
+    ComparisonNotReady,
+    DuplicateQuote,
+    InvalidQuoteState,
+    QuoteExtractionFailure,
+    QuoteNotFound,
+    QuoteProviderError,
+    QuoteStorageError,
+)
 from app.domain.rfqs.exceptions import (
     AttachmentValidationError,
     DuplicateRfqSend,
@@ -169,14 +179,19 @@ def register_exception_handlers(app: FastAPI) -> None:
         (EmailTemplateNotFound, status.HTTP_503_SERVICE_UNAVAILABLE, "email_template_not_found"),
         (EmailCompositionError, status.HTTP_503_SERVICE_UNAVAILABLE, "email_composition_failed"),
         (EmailDeliveryError, status.HTTP_503_SERVICE_UNAVAILABLE, "email_delivery_failed"),
+        (QuoteNotFound, status.HTTP_404_NOT_FOUND, "quote_not_found"),
+        (ComparisonNotFound, status.HTTP_404_NOT_FOUND, "comparison_not_found"),
+        (DuplicateQuote, status.HTTP_409_CONFLICT, "duplicate_quote"),
+        (InvalidQuoteState, status.HTTP_409_CONFLICT, "invalid_quote_state"),
+        (ComparisonNotReady, status.HTTP_409_CONFLICT, "comparison_not_ready"),
+        (QuoteStorageError, status.HTTP_503_SERVICE_UNAVAILABLE, "quote_storage_unavailable"),
+        (QuoteProviderError, status.HTTP_503_SERVICE_UNAVAILABLE, "quote_provider_unavailable"),
+        (QuoteExtractionFailure, status.HTTP_503_SERVICE_UNAVAILABLE, "quote_extraction_failed"),
         (ValidationError, status.HTTP_422_UNPROCESSABLE_CONTENT, "validation_error"),
     ]
 
     for exception_type, status_code, code in mappings:
-        app.add_exception_handler(
-            exception_type,
-            _exception_handler(status_code, code),
-        )
+        app.add_exception_handler(exception_type, _exception_handler(status_code, code))
 
     @app.exception_handler(RequestValidationError)
     async def request_validation_handler(

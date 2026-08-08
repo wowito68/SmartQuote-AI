@@ -15,6 +15,7 @@ class RfqStatus(StrEnum):
     SENDING = "sending"
     SENT = "sent"
     DELIVERED = "delivered"
+    RESPONDED = "responded"
     FAILED = "failed"
     CANCELLED = "cancelled"
 

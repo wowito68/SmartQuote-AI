@@ -11,6 +11,9 @@ class SupplierStatus(StrEnum):
     APPROVED = "approved"
     REJECTED = "rejected"
     MERGED = "merged"
+    CONTACTED = "contacted"
+    RESPONDED = "responded"
+    INACTIVE = "inactive"
 
 
 class SupplierContactType(StrEnum):

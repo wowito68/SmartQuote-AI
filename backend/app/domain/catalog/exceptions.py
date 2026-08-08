@@ -17,6 +17,10 @@ class InvalidProductState(CatalogError):
     pass
 
 
+class ProductNotApproved(InvalidProductState):
+    pass
+
+
 class InvalidCatalogState(CatalogError):
     pass
 

@@ -17,6 +17,10 @@ class InvalidSupplierState(SupplierError):
     pass
 
 
+class SupplierNotApproved(InvalidSupplierState):
+    pass
+
+
 class InvalidSupplierDiscoveryState(SupplierError):
     pass
 

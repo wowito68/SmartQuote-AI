@@ -30,8 +30,9 @@ class TenderModel(Base):
     __tablename__ = "tenders"
     __table_args__ = (
         CheckConstraint(
-            "status IN ('draft', 'documents_pending', 'documents_processing', "
-            "'catalog_review', 'cancelled', 'closed')",
+            "status IN ('draft', 'documents_pending', 'documents_processing', 'catalog_review', "
+            "'supplier_review', 'rfq_ready', 'waiting_quotes', 'quote_analysis', "
+            "'comparison_ready', 'awarded', 'cancelled', 'closed')",
             name="valid_tender_status",
         ),
         Index("ix_tenders_created_by_user_id", "created_by_user_id"),
