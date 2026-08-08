@@ -1,4 +1,7 @@
-class QuoteError(Exception):
+from app.domain.shared.exceptions import DomainError
+
+
+class QuoteError(DomainError):
     """Base exception for quote workflow failures."""
 
 
