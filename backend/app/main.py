@@ -18,7 +18,9 @@ def create_app() -> FastAPI:
     application = FastAPI(
         title=settings.project_name,
         version=settings.version,
-        description="REST API for SmartQuote AI tender sourcing, RFQ delivery and quote comparison.",
+        description=(
+            "REST API for SmartQuote AI tender sourcing, RFQ delivery and quote comparison."
+        ),
     )
     register_exception_handlers(application)
     application.include_router(health_router)
