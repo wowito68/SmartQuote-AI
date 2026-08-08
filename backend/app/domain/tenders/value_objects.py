@@ -8,6 +8,12 @@ class TenderStatus(StrEnum):
     DOCUMENTS_PENDING = "documents_pending"
     DOCUMENTS_PROCESSING = "documents_processing"
     CATALOG_REVIEW = "catalog_review"
+    SUPPLIER_REVIEW = "supplier_review"
+    RFQ_READY = "rfq_ready"
+    WAITING_QUOTES = "waiting_quotes"
+    QUOTE_ANALYSIS = "quote_analysis"
+    COMPARISON_READY = "comparison_ready"
+    AWARDED = "awarded"
     CANCELLED = "cancelled"
     CLOSED = "closed"
 
