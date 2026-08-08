@@ -1,3 +1,5 @@
+from uuid import UUID
+
 from app.application.dtos.quotes import QuoteResponse, UploadQuoteCommand
 from app.application.exceptions import TenderNotFound
 from app.application.ports.file_storage import FileStorage
@@ -15,16 +17,16 @@ from app.domain.tenders.value_objects import TenderStatus
 class SynchronizeTenderForQuoteAnalysis:
     """Repair legacy tender-state drift using already-verified MVP artifacts.
 
-    Iterations 1-8 persisted the document/catalog/supplier/RFQ artifacts but did not
-    advance every global TenderStatus milestone. Iteration 9 keeps the strict domain
-    transition graph and replays only sequential transitions whose prerequisites are
-    demonstrably present in persistence.
+    Iterations 1-8 persisted document, catalog, supplier and RFQ artifacts without
+    advancing every global TenderStatus milestone. This compatibility bridge keeps
+    the strict domain graph and replays only sequential transitions supported by
+    persisted evidence. It stops at waiting_quotes before the quote is accepted.
     """
 
     def __init__(self, uow_factory: UnitOfWorkFactory) -> None:
         self._uow_factory = uow_factory
 
-    def execute(self, tender_id, tender_supplier_id) -> TenderStatus:
+    def execute(self, tender_id: UUID, tender_supplier_id: UUID) -> TenderStatus:
         with self._uow_factory() as uow:
             tender = uow.tenders.get_by_id(tender_id)
             if tender is None:
@@ -36,31 +38,37 @@ class SynchronizeTenderForQuoteAnalysis:
                 TenderStatus.COMPARISON_READY,
             }:
                 raise InvalidQuoteState("Tender no longer accepts supplier quotes.")
+            if tender.status is TenderStatus.QUOTE_ANALYSIS:
+                return tender.status
 
             documents = uow.documents.list_by_tender(tender_id)
             if not documents or any(
                 document.status is not DocumentStatus.READY_FOR_AI for document in documents
             ):
                 raise InvalidQuoteState(
-                    "Tender documents must be fully processed before quote analysis."
+                    "Tender documents must be fully processed before supplier quotes."
                 )
             if uow.catalogs.get_latest_snapshot(tender_id) is None:
-                raise InvalidQuoteState("Tender requires an approved catalog before quote analysis.")
+                raise InvalidQuoteState("Tender requires an approved catalog before supplier quotes.")
 
             tender_supplier = uow.suppliers.get_tender_supplier(tender_supplier_id)
             if tender_supplier is None or tender_supplier.tender_id != tender_id:
                 raise InvalidQuoteState("Tender supplier was not found for quote analysis.")
-            if tender_supplier.status is not SupplierStatus.RESPONDED:
-                raise InvalidQuoteState("Supplier response must be registered before quote analysis.")
+            if tender_supplier.status not in {
+                SupplierStatus.APPROVED,
+                SupplierStatus.CONTACTED,
+                SupplierStatus.RESPONDED,
+            }:
+                raise InvalidQuoteState("Supplier must be approved before a quote can be loaded.")
 
-            responded_rfqs = [
+            sent_rfqs = [
                 rfq
                 for rfq in uow.rfqs.list_rfqs(tender_id)
                 if rfq.tender_supplier_id == tender_supplier_id
-                and rfq.status is RfqStatus.RESPONDED
+                and rfq.status in {RfqStatus.SENT, RfqStatus.DELIVERED, RfqStatus.RESPONDED}
             ]
-            if not responded_rfqs:
-                raise InvalidQuoteState("A responded RFQ is required before quote analysis.")
+            if not sent_rfqs:
+                raise InvalidQuoteState("A sent RFQ is required before a quote can be loaded.")
 
             previous_status = tender.status
             if tender.status is TenderStatus.DRAFT:
@@ -75,10 +83,8 @@ class SynchronizeTenderForQuoteAnalysis:
                 tender.change_status(TenderStatus.RFQ_READY)
             if tender.status is TenderStatus.RFQ_READY:
                 tender.change_status(TenderStatus.WAITING_QUOTES)
-            if tender.status is TenderStatus.WAITING_QUOTES:
-                tender.change_status(TenderStatus.QUOTE_ANALYSIS)
-            if tender.status is not TenderStatus.QUOTE_ANALYSIS:
-                raise InvalidQuoteState("Tender cannot enter quote analysis from its current state.")
+            if tender.status is not TenderStatus.WAITING_QUOTES:
+                raise InvalidQuoteState("Tender cannot accept quotes from its current state.")
 
             if tender.status is not previous_status:
                 uow.tenders.update(tender)
@@ -116,6 +122,5 @@ class UploadSupplierQuoteWorkflow:
         self._synchronize = SynchronizeTenderForQuoteAnalysis(uow_factory)
 
     def execute(self, command: UploadQuoteCommand) -> QuoteResponse:
-        result = self._upload.execute(command)
         self._synchronize.execute(command.tender_id, command.tender_supplier_id)
-        return result
+        return self._upload.execute(command)
