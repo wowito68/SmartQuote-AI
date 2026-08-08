@@ -3,10 +3,8 @@ from decimal import Decimal
 from pathlib import Path
 from uuid import UUID
 
-import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
-from tests.integration.test_ai_catalog_pipeline import PAGE_TEXT
 from tests.integration.test_rfq_pipeline import (
     RecordingEmailSender,
     RecordingRfqQueue,
@@ -37,11 +35,8 @@ from app.application.ports.document_text_extractor import (
     TextExtractionResult,
 )
 from app.application.ports.quote_analysis_queue import QuoteAnalysisQueue
-from app.application.services.supplier_deduplication import SupplierDeduplicationService
-from app.application.services.supplier_matching import SupplierMatchingService
 from app.application.use_cases.quotes import ProcessSupplierQuote
 from app.application.use_cases.rfqs import DeliverRfq
-from app.application.use_cases.supplier_discovery import ProcessSupplierDiscoveryRun
 from app.config.settings import get_settings
 from app.domain.quotes.value_objects import QuoteExtractionRunStatus, QuoteStatus
 from app.domain.rfqs.value_objects import RfqStatus
@@ -274,7 +269,10 @@ def test_quote_upload_extraction_review_comparison_and_retries_are_idempotent(
         comparison_payload = comparison.json()
         assert comparison_payload["recommendation"]["human_review_required"] is True
         assert comparison_payload["recommendation"]["decision"] == "recommendation_only"
-        assert comparison_payload["recommendation"]["recommended_supplier_id"] == rfq["supplier_id"]
+        assert (
+            comparison_payload["recommendation"]["recommended_supplier_id"]
+            == rfq["supplier_id"]
+        )
         assert comparison_payload["rows"][0]["source"]["quote_id"] == str(quote_id)
         assert comparison_payload["rows"][0]["source"]["evidence_fragment"] in QUOTE_TEXT
 
@@ -293,9 +291,7 @@ def test_quote_upload_extraction_review_comparison_and_retries_are_idempotent(
             assert quote_model is not None
             assert quote_model.status == QuoteStatus.INCLUDED_IN_COMPARISON.value
             run = session.scalar(
-                select(QuoteExtractionRunModel).where(
-                    QuoteExtractionRunModel.quote_id == quote_id
-                )
+                select(QuoteExtractionRunModel).where(QuoteExtractionRunModel.quote_id == quote_id)
             )
             assert run is not None
             assert run.status == QuoteExtractionRunStatus.COMPLETED.value
@@ -305,7 +301,10 @@ def test_quote_upload_extraction_review_comparison_and_retries_are_idempotent(
             assert run.estimated_cost_usd == Decimal("0.000530")
             assert session.scalar(select(func.count()).select_from(QuoteItemModel)) == 1
             assert session.scalar(select(func.count()).select_from(ComparisonRunModel)) == 1
-            tender_supplier = session.get(TenderSupplierModel, UUID(rfq["tender_supplier_id"]))
+            tender_supplier = session.get(
+                TenderSupplierModel,
+                UUID(rfq["tender_supplier_id"]),
+            )
             assert tender_supplier is not None
             assert tender_supplier.status == SupplierStatus.RESPONDED.value
             rfq_model = session.get(RfqRequestModel, UUID(rfq["id"]))
