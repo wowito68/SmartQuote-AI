@@ -49,7 +49,7 @@ services:
     command: >-
       uv run celery -A app.infrastructure.tasks.celery_app:celery_app worker
       --loglevel=INFO
-      --queues=document-processing,ai-extraction,supplier-discovery,rfq-delivery
+      --queues=document-processing,ai-extraction,supplier-discovery,rfq-delivery,quote-analysis
       --concurrency=2
 
   beat:
