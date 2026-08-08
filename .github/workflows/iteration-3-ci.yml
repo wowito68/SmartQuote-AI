@@ -207,6 +207,7 @@ jobs:
           from app.main import app
           schema = app.openapi()
           expected = {
+              "/ready": {"get"},
               "/api/v1/documents/{document_id}/status": {"get"},
               "/api/v1/documents/{document_id}/pages": {"get"},
               "/api/v1/documents/{document_id}/quality": {"get"},
@@ -229,6 +230,11 @@ jobs:
               "/api/v1/rfqs/{rfq_id}/cancel": {"post"},
               "/api/v1/rfqs/{rfq_id}/send": {"post"},
               "/api/v1/rfqs/{rfq_id}/messages": {"get"},
+              "/api/v1/tenders/{tender_id}/suppliers/{tender_supplier_id}/quotes": {"post"},
+              "/api/v1/tenders/{tender_id}/quotes": {"get"},
+              "/api/v1/quotes/{quote_id}": {"get"},
+              "/api/v1/quotes/{quote_id}/review": {"post"},
+              "/api/v1/tenders/{tender_id}/comparison": {"get", "post"},
           }
           for path, methods in expected.items():
               assert path in schema["paths"]
