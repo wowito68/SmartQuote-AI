@@ -77,10 +77,16 @@ def upgrade() -> None:
         sa.Column("rejection_reason", sa.Text(), nullable=True),
         sa.Column("last_error", sa.Text(), nullable=True),
         sa.Column(
-            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=False,
         ),
         sa.Column(
-            "updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=False,
         ),
         sa.CheckConstraint(
             "status IN ('received', 'validating', 'extracting', 'extracted', 'normalized', "
@@ -127,7 +133,10 @@ def upgrade() -> None:
         sa.Column("input_tokens", sa.Integer(), server_default="0", nullable=False),
         sa.Column("output_tokens", sa.Integer(), server_default="0", nullable=False),
         sa.Column(
-            "estimated_cost_usd", sa.Numeric(precision=18, scale=6), server_default="0", nullable=False
+            "estimated_cost_usd",
+            sa.Numeric(precision=18, scale=6),
+            server_default="0",
+            nullable=False,
         ),
         sa.Column("raw_response", sa.JSON(), nullable=True),
         sa.Column("error_type", sa.String(length=255), nullable=True),
@@ -135,7 +144,10 @@ def upgrade() -> None:
         sa.Column("started_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("completed_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column(
-            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=False,
         ),
         sa.CheckConstraint(
             "status IN ('queued', 'running', 'completed', 'failed', 'reused')",
@@ -169,7 +181,10 @@ def upgrade() -> None:
         sa.Column("evidence_fragment", sa.Text(), nullable=True),
         sa.Column("confidence", sa.Float(), server_default="0", nullable=False),
         sa.Column(
-            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=False,
         ),
         sa.ForeignKeyConstraint(["quote_id"], ["quotes.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(
@@ -194,7 +209,10 @@ def upgrade() -> None:
         sa.Column("recommendation", sa.JSON(), nullable=False),
         sa.Column("generated_by_user_id", sa.Uuid(), nullable=False),
         sa.Column(
-            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=False,
         ),
         sa.ForeignKeyConstraint(["tender_id"], ["tenders.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(
@@ -232,7 +250,8 @@ def downgrade() -> None:
     _replace_check_constraint(
         "tender_suppliers",
         "valid_tender_supplier_status",
-        "status IN ('candidate', 'contacts_found', 'pending_review', 'approved', 'rejected', 'merged')",
+        "status IN ('candidate', 'contacts_found', 'pending_review', 'approved', "
+        "'rejected', 'merged')",
     )
     _replace_check_constraint(
         "catalog_products",
