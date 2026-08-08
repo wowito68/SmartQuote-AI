@@ -49,6 +49,8 @@ class Settings(BaseSettings):
         default=Path("app/supplier_sources/default_directory.json")
     )
     supplier_search_country: str | None = Field(default="MX")
+    supplier_search_city: str | None = Field(default=None)
+    supplier_search_query_version: str = Field(default="1.0.0")
     supplier_search_max_results_per_product: int = Field(default=10, ge=1, le=100)
     supplier_matching_algorithm_version: str = Field(default="1.0.0")
 

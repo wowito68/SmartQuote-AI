@@ -1,37 +1,32 @@
-import re
 from dataclasses import dataclass
 from difflib import SequenceMatcher
-from urllib.parse import urlparse
+from enum import StrEnum
 from uuid import UUID
 
 from app.application.ports.supplier_search_service import SupplierSuggestion
+from app.application.services.supplier_normalization import (
+    normalize_domain,
+    normalize_name,
+    normalize_phone,
+)
 from app.domain.suppliers.entities import Supplier, SupplierContact
 from app.domain.suppliers.value_objects import SupplierContactType
 
-_NON_ALNUM = re.compile(r"[^a-z0-9]+")
+
+class SupplierDuplicateStatus(StrEnum):
+    DUPLICATE = "duplicate"
+    POSSIBLE_DUPLICATE = "possible_duplicate"
+    UNIQUE = "unique"
 
 
-def normalize_name(value: str | None) -> str:
-    return _NON_ALNUM.sub(" ", (value or "").casefold()).strip()
-
-
-def normalize_domain(value: str | None) -> str | None:
-    if not value:
-        return None
-    parsed = urlparse(value if "://" in value else f"https://{value}")
-    host = (parsed.hostname or "").casefold().strip(".")
-    if host.startswith("www."):
-        host = host[4:]
-    return host or None
-
-
-def normalize_phone(value: str | None) -> str | None:
-    digits = "".join(character for character in (value or "") if character.isdigit())
-    if len(digits) == 13 and digits.startswith("521"):
-        digits = digits[3:]
-    elif len(digits) == 12 and digits.startswith("52"):
-        digits = digits[2:]
-    return digits or None
+@dataclass(frozen=True, slots=True)
+class SupplierDeduplicationWeights:
+    same_domain: float = 0.60
+    same_email: float = 0.35
+    same_phone: float = 0.30
+    legal_name_similarity: float = 0.30
+    trade_name_similarity: float = 0.25
+    same_city: float = 0.05
 
 
 @dataclass(frozen=True, slots=True)
@@ -40,11 +35,22 @@ class SupplierDuplicateResult:
     score: float
     signals: tuple[str, ...]
     exact_identity: bool
+    status: SupplierDuplicateStatus
 
 
 class SupplierDeduplicationService:
-    version = "1.0.0"
+    version = "2.0.0"
     suggestion_threshold = 0.40
+
+    def __init__(
+        self,
+        weights: SupplierDeduplicationWeights | None = None,
+        *,
+        suggestion_threshold: float | None = None,
+    ) -> None:
+        self.weights = weights or SupplierDeduplicationWeights()
+        if suggestion_threshold is not None:
+            self.suggestion_threshold = suggestion_threshold
 
     def compare(
         self,
@@ -58,7 +64,7 @@ class SupplierDeduplicationService:
 
         suggestion_domain = normalize_domain(suggestion.website)
         if suggestion_domain and suggestion_domain == supplier.normalized_domain:
-            score += 0.60
+            score += self.weights.same_domain
             signals.append("same_web_domain")
             exact_identity = True
 
@@ -73,8 +79,9 @@ class SupplierDeduplicationService:
             if item.contact_type is SupplierContactType.EMAIL
         }
         if suggested_emails & existing_emails:
-            score += 0.35
+            score += self.weights.same_email
             signals.append("same_email")
+            exact_identity = True
 
         suggested_phones = {
             normalize_phone(item.value)
@@ -85,14 +92,14 @@ class SupplierDeduplicationService:
         existing_phones = {
             normalize_phone(item.value)
             for item in existing_contacts
-            if item.contact_type
-            in {SupplierContactType.PHONE, SupplierContactType.WHATSAPP}
+            if item.contact_type in {SupplierContactType.PHONE, SupplierContactType.WHATSAPP}
         }
         suggested_phones.discard(None)
         existing_phones.discard(None)
         if suggested_phones & existing_phones:
-            score += 0.30
+            score += self.weights.same_phone
             signals.append("same_phone")
+            exact_identity = True
 
         legal_similarity = SequenceMatcher(
             None,
@@ -105,10 +112,10 @@ class SupplierDeduplicationService:
             normalize_name(supplier.trade_name),
         ).ratio()
         if legal_similarity >= 0.65:
-            score += legal_similarity * 0.30
+            score += legal_similarity * self.weights.legal_name_similarity
             signals.append(f"legal_name_similarity:{legal_similarity:.3f}")
         if trade_similarity >= 0.65:
-            score += trade_similarity * 0.25
+            score += trade_similarity * self.weights.trade_name_similarity
             signals.append(f"trade_name_similarity:{trade_similarity:.3f}")
 
         exact_legal = bool(
@@ -118,16 +125,28 @@ class SupplierDeduplicationService:
         if exact_legal:
             exact_identity = True
             signals.append("same_legal_name")
-        if "same_email" in signals and max(legal_similarity, trade_similarity) >= 0.65:
-            exact_identity = True
-        if "same_phone" in signals and max(legal_similarity, trade_similarity) >= 0.85:
-            exact_identity = True
 
+        if (
+            suggestion.city
+            and supplier.city
+            and normalize_name(suggestion.city) == normalize_name(supplier.city)
+        ):
+            score += self.weights.same_city
+            signals.append("same_city")
+
+        bounded = round(min(score, 1.0), 4)
+        if exact_identity:
+            status = SupplierDuplicateStatus.DUPLICATE
+        elif bounded >= self.suggestion_threshold:
+            status = SupplierDuplicateStatus.POSSIBLE_DUPLICATE
+        else:
+            status = SupplierDuplicateStatus.UNIQUE
         return SupplierDuplicateResult(
             supplier_id=supplier.id,
-            score=round(min(score, 1.0), 4),
+            score=bounded,
             signals=tuple(dict.fromkeys(signals)),
             exact_identity=exact_identity,
+            status=status,
         )
 
     def find_best(

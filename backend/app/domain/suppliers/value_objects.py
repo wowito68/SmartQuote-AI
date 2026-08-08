@@ -47,6 +47,12 @@ class MergeSuggestionStatus(StrEnum):
     REJECTED = "rejected"
 
 
+class SupplierMatchStatus(StrEnum):
+    CANDIDATE = "candidate"
+    CONFIRMED = "confirmed"
+    REJECTED = "rejected"
+
+
 @dataclass(frozen=True, slots=True)
 class SupplierConfidence:
     value: float

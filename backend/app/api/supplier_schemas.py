@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -8,12 +9,15 @@ from app.domain.suppliers.value_objects import (
     SupplierContactType,
     SupplierDiscoveryRunStatus,
     SupplierDiscoveryStage,
+    SupplierMatchStatus,
     SupplierStatus,
 )
 
 
 class SupplierDiscoveryRequestSchema(BaseModel):
     requested_by_user_id: UUID
+    refresh: bool = False
+    correlation_id: str | None = Field(default=None, min_length=1, max_length=128)
 
 
 class SupplierDiscoveryRunResponseSchema(BaseModel):
@@ -31,9 +35,30 @@ class SupplierDiscoveryRunResponseSchema(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class SupplierDiscoveryRunTraceResponseSchema(BaseModel):
+    id: UUID
+    tender_id: UUID
+    catalog_snapshot_id: UUID
+    status: SupplierDiscoveryRunStatus
+    current_stage: SupplierDiscoveryStage
+    search_provider: str
+    search_provider_version: str
+    matching_algorithm_version: str
+    query_version: str
+    search_identity_key: str
+    correlation_id: str
+    refresh_sequence: int = Field(ge=1)
+    refresh_of_run_id: UUID | None
+    estimated_cost_usd: float = Field(ge=0)
+    reused: bool
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class SupplierDiscoveryRequestResponseSchema(BaseModel):
     tender_id: UUID
-    run: SupplierDiscoveryRunResponseSchema
+    run: SupplierDiscoveryRunTraceResponseSchema
     queued: bool
     reused: bool
 
@@ -69,6 +94,11 @@ class SupplierSourceResponseSchema(BaseModel):
     source_url: str
     source_title: str | None
     excerpt: str | None
+    discovery_run_id: UUID | None = None
+    product_id: UUID | None = None
+    query: str | None = None
+    source_name: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
     discovered_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
@@ -81,6 +111,9 @@ class ProductSupplierMatchResponseSchema(BaseModel):
     components: dict[str, float]
     reasons: tuple[str, ...]
     algorithm_version: str
+    match_status: SupplierMatchStatus = SupplierMatchStatus.CANDIDATE
+    source_url: str | None = None
+    reason: str | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -150,6 +183,68 @@ class TenderSuppliersResponseSchema(BaseModel):
     metrics: SupplierMetricsResponseSchema
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class SupplierCandidateTraceResponseSchema(BaseModel):
+    run_id: UUID
+    product_id: UUID
+    supplier_id: UUID
+    tender_supplier_id: UUID
+    status: SupplierStatus
+    legal_name: str | None
+    trade_name: str | None
+    website: str | None
+    normalized: dict[str, Any]
+    source_url: str
+    source_title: str | None
+    source_type: str
+    query: str
+    search_provider: str
+    searched_at: datetime | None
+    initial_score: float | None
+    duplicate_status: str
+    duplicate_score: float = Field(ge=0, le=1)
+    duplicate_signals: tuple[str, ...]
+    match_score: float | None = Field(default=None, ge=0, le=100)
+    match_status: SupplierMatchStatus | None
+    match_reasons: tuple[str, ...]
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class SupplierCandidatesResponseSchema(BaseModel):
+    tender_id: UUID
+    candidates: tuple[SupplierCandidateTraceResponseSchema, ...]
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ProductSupplierTraceResponseSchema(BaseModel):
+    product_id: UUID
+    tender_supplier_id: UUID
+    supplier_id: UUID
+    status: SupplierStatus
+    legal_name: str | None
+    trade_name: str | None
+    website: str | None
+    match_score: float = Field(ge=0, le=100)
+    match_status: SupplierMatchStatus
+    source_url: str | None
+    reason: str
+    reasons: tuple[str, ...]
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ProductSuppliersResponseSchema(BaseModel):
+    product_id: UUID
+    suppliers: tuple[ProductSupplierTraceResponseSchema, ...]
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ProductSupplierMatchRequestSchema(BaseModel):
+    requested_by_user_id: UUID
 
 
 class SupplierUpdateRequestSchema(BaseModel):

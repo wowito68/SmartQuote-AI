@@ -1,5 +1,5 @@
 from typing import Annotated
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, status
 
@@ -11,7 +11,10 @@ from app.api.dependencies import (
 from app.api.schemas import ErrorResponseSchema
 from app.api.supplier_schemas import (
     ManualSupplierRequestSchema,
+    ProductSupplierMatchRequestSchema,
+    ProductSuppliersResponseSchema,
     SupplierApprovalRequestSchema,
+    SupplierCandidatesResponseSchema,
     SupplierDiscoveryRequestResponseSchema,
     SupplierDiscoveryRequestSchema,
     SupplierMergeRequestSchema,
@@ -30,7 +33,13 @@ from app.application.ports.supplier_search_service import SupplierSearchService
 from app.application.ports.unit_of_work import UnitOfWorkFactory
 from app.application.services.supplier_deduplication import SupplierDeduplicationService
 from app.application.services.supplier_matching import SupplierMatchingService
-from app.application.use_cases.supplier_discovery import RequestSupplierDiscovery
+from app.application.services.supplier_query_builder import SupplierQueryBuilder
+from app.application.use_cases.supplier_discovery_v2 import (
+    ListProductSuppliers,
+    ListSupplierCandidates,
+    MatchSupplierToProduct,
+    RequestSupplierDiscoveryV2,
+)
 from app.application.use_cases.suppliers import (
     ApproveSupplier,
     CreateManualSupplier,
@@ -41,6 +50,7 @@ from app.application.use_cases.suppliers import (
     UpdateSupplier,
 )
 from app.config.settings import Settings, get_settings
+from app.infrastructure.search.inline_contact_discovery import InlineContactDiscoveryService
 
 router = APIRouter(tags=["suppliers"])
 UowFactoryDependency = Annotated[UnitOfWorkFactory, Depends(get_uow_factory)]
@@ -88,18 +98,45 @@ def request_supplier_discovery(
     search_service: SupplierSearchDependency,
     settings: SettingsDependency,
 ) -> SupplierDiscoveryRequestResponseSchema:
-    result = RequestSupplierDiscovery(
+    correlation_id = request.correlation_id or uuid4().hex
+    matching_service = SupplierMatchingService(settings.supplier_matching_algorithm_version)
+    deduplication_service = SupplierDeduplicationService()
+    query_builder = SupplierQueryBuilder(settings.supplier_search_query_version)
+    contact_service = InlineContactDiscoveryService()
+    result = RequestSupplierDiscoveryV2(
         uow_factory,
         queue,
         search_service,
-        SupplierMatchingService(settings.supplier_matching_algorithm_version),
+        matching_service,
+        deduplication_service,
+        query_builder,
+        contact_service,
         search_configuration={
             "country": settings.supplier_search_country,
+            "city": settings.supplier_search_city,
             "max_results_per_product": settings.supplier_search_max_results_per_product,
         },
-    ).execute(tender_id, request.requested_by_user_id)
-    return SupplierDiscoveryRequestResponseSchema.model_validate(
-        result, from_attributes=True
+    ).execute(
+        tender_id,
+        request.requested_by_user_id,
+        refresh=request.refresh,
+        correlation_id=correlation_id,
+    )
+    return SupplierDiscoveryRequestResponseSchema.model_validate(result, from_attributes=True)
+
+
+@router.get(
+    "/tenders/{tender_id}/supplier-candidates",
+    response_model=SupplierCandidatesResponseSchema,
+    summary="List supplier candidates with query, source and match traceability",
+    responses={404: ERROR_RESPONSES[404]},
+)
+def list_supplier_candidates(
+    tender_id: UUID,
+    uow_factory: UowFactoryDependency,
+) -> SupplierCandidatesResponseSchema:
+    return SupplierCandidatesResponseSchema.model_validate(
+        ListSupplierCandidates(uow_factory).execute(tender_id), from_attributes=True
     )
 
 
@@ -115,6 +152,43 @@ def list_tender_suppliers(
 ) -> TenderSuppliersResponseSchema:
     return TenderSuppliersResponseSchema.model_validate(
         GetTenderSuppliers(uow_factory).execute(tender_id), from_attributes=True
+    )
+
+
+@router.get(
+    "/products/{product_id}/suppliers",
+    response_model=ProductSuppliersResponseSchema,
+    summary="List suppliers matched to a catalog product",
+    responses={404: ERROR_RESPONSES[404]},
+)
+def list_product_suppliers(
+    product_id: UUID,
+    uow_factory: UowFactoryDependency,
+) -> ProductSuppliersResponseSchema:
+    return ProductSuppliersResponseSchema.model_validate(
+        ListProductSuppliers(uow_factory).execute(product_id), from_attributes=True
+    )
+
+
+@router.post(
+    "/products/{product_id}/suppliers/{supplier_id}/match",
+    response_model=ProductSuppliersResponseSchema,
+    summary="Confirm an explainable product-to-approved-supplier association",
+    responses=ERROR_RESPONSES,
+)
+def match_supplier_to_product(
+    product_id: UUID,
+    supplier_id: UUID,
+    request: ProductSupplierMatchRequestSchema,
+    uow_factory: UowFactoryDependency,
+    settings: SettingsDependency,
+) -> ProductSuppliersResponseSchema:
+    MatchSupplierToProduct(
+        uow_factory,
+        SupplierMatchingService(settings.supplier_matching_algorithm_version),
+    ).execute(product_id, supplier_id, request.requested_by_user_id)
+    return ProductSuppliersResponseSchema.model_validate(
+        ListProductSuppliers(uow_factory).execute(product_id), from_attributes=True
     )
 
 

@@ -14,6 +14,7 @@ from app.domain.suppliers.value_objects import (
     SupplierDiscoveryRunStatus,
     SupplierDiscoveryStage,
     SupplierMatchScore,
+    SupplierMatchStatus,
     SupplierStatus,
 )
 from app.infrastructure.db.models.supplier import (
@@ -90,6 +91,7 @@ def discovery_run_to_domain(model: SupplierDiscoveryRunModel) -> SupplierDiscove
 def update_discovery_run_model(
     model: SupplierDiscoveryRunModel, run: SupplierDiscoveryRun
 ) -> None:
+    model.search_configuration = run.search_configuration
     model.status = run.status.value
     model.current_stage = run.current_stage.value
     model.raw_candidates = run.raw_candidates
@@ -192,6 +194,11 @@ def source_to_model(source: SupplierSource) -> SupplierSourceModel:
         source_url=source.source_url,
         source_title=source.source_title,
         excerpt=source.excerpt,
+        discovery_run_id=source.discovery_run_id,
+        product_id=source.product_id,
+        query=source.query,
+        source_name=source.source_name,
+        source_metadata=source.metadata,
         discovered_at=source.discovered_at,
     )
 
@@ -205,6 +212,11 @@ def source_to_domain(model: SupplierSourceModel) -> SupplierSource:
         source_url=model.source_url,
         source_title=model.source_title,
         excerpt=model.excerpt,
+        discovery_run_id=model.discovery_run_id,
+        product_id=model.product_id,
+        query=model.query,
+        source_name=model.source_name,
+        metadata=dict(model.source_metadata or {}),
         discovered_at=model.discovered_at,
     )
 
@@ -261,6 +273,9 @@ def match_to_model(match: ProductSupplierMatch) -> ProductSupplierMatchModel:
         components=match.components,
         reasons=list(match.reasons),
         algorithm_version=match.algorithm_version,
+        match_status=match.match_status.value,
+        source_url=match.source_url,
+        reason=match.reason,
         created_at=match.created_at,
     )
 
@@ -274,6 +289,9 @@ def match_to_domain(model: ProductSupplierMatchModel) -> ProductSupplierMatch:
         components=dict(model.components or {}),
         reasons=tuple(model.reasons or []),
         algorithm_version=model.algorithm_version,
+        match_status=SupplierMatchStatus(model.match_status),
+        source_url=model.source_url,
+        reason=model.reason,
         created_at=model.created_at,
     )
 
@@ -283,6 +301,9 @@ def update_match_model(model: ProductSupplierMatchModel, match: ProductSupplierM
     model.components = match.components
     model.reasons = list(match.reasons)
     model.algorithm_version = match.algorithm_version
+    model.match_status = match.match_status.value
+    model.source_url = match.source_url
+    model.reason = match.reason
 
 
 def merge_suggestion_to_model(

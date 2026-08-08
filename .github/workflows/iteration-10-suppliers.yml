@@ -1,0 +1,93 @@
+name: Iteration 10 suppliers
+
+on:
+  push:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  supplier-backend:
+    name: Supplier discovery focused tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: smartquote
+          POSTGRES_PASSWORD: smartquote
+          POSTGRES_DB: smartquote
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U smartquote -d smartquote"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      SMARTQUOTE_DATABASE_URL: postgresql+psycopg://smartquote:smartquote@localhost:5432/smartquote
+      SMARTQUOTE_STORAGE_ROOT: /tmp/smartquote-iteration10-storage
+      SMARTQUOTE_CELERY_BROKER_URL: memory://
+      SMARTQUOTE_CELERY_RESULT_BACKEND: cache+memory://
+      SMARTQUOTE_CELERY_TASK_ALWAYS_EAGER: "true"
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+          enable-cache: true
+      - run: uv sync --frozen
+      - run: uv run alembic upgrade head
+      - name: Supplier unit and integration tests
+        run: >-
+          uv run pytest
+          tests/unit/application/test_supplier_query_builder.py
+          tests/unit/application/test_supplier_normalization.py
+          tests/unit/application/test_supplier_deduplication.py
+          tests/unit/application/test_supplier_deduplication_v2.py
+          tests/unit/application/test_supplier_matching.py
+          tests/unit/application/test_supplier_search_contract.py
+          tests/integration/test_supplier_discovery_pipeline.py
+          tests/integration/test_supplier_iteration10.py
+          -q
+      - name: Validate Iteration 10 API contract
+        run: |
+          uv run python - <<'PY'
+          from app.main import app
+          schema = app.openapi()
+          expected = {
+              "/api/v1/tenders/{tender_id}/suppliers/discover": {"post"},
+              "/api/v1/tenders/{tender_id}/supplier-candidates": {"get"},
+              "/api/v1/tenders/{tender_id}/suppliers": {"get"},
+              "/api/v1/products/{product_id}/suppliers": {"get"},
+              "/api/v1/products/{product_id}/suppliers/{supplier_id}/match": {"post"},
+              "/api/v1/suppliers/{supplier_id}/approve": {"post"},
+              "/api/v1/suppliers/{supplier_id}/reject": {"post"},
+          }
+          for path, methods in expected.items():
+              assert path in schema["paths"]
+              assert methods <= set(schema["paths"][path])
+          PY
+
+  frontend:
+    name: Supplier review frontend build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run build

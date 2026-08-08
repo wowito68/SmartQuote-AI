@@ -52,7 +52,7 @@ export function SuppliersPanel({
     <Section
       title="Proveedores"
       eyebrow="Busqueda y aprobacion"
-      description="Candidatos por licitacion, contactos, coincidencias y estado de revision."
+      description="Candidatos por licitacion, contactos, fuentes, coincidencias y revision humana."
       action={
         <>
           <Button variant="secondary" onClick={() => void onRefresh()}>
@@ -139,7 +139,9 @@ function SupplierCard({
   const [busy, setBusy] = useState(false);
   const name = supplier.trade_name || supplier.legal_name || "Proveedor sin nombre";
   const email = supplier.contacts.find((contact) => contact.contact_type === "email");
-  const bestScore = Math.max(0, ...supplier.matches.map((match) => match.score));
+  const bestMatch = [...supplier.matches].sort((left, right) => right.score - left.score)[0];
+  const bestScore = bestMatch?.score ?? 0;
+  const source = supplier.sources[0];
 
   async function approve() {
     setBusy(true);
@@ -171,7 +173,9 @@ function SupplierCard({
             {supplier.is_manual ? <StatusBadge value="manual" /> : null}
           </div>
           <p className="mt-1 text-sm text-text-secondary">
-            {supplier.legal_name && supplier.trade_name ? supplier.legal_name : supplier.category || "Sin categoria"}
+            {supplier.legal_name && supplier.trade_name
+              ? supplier.legal_name
+              : supplier.category || "Sin categoria"}
           </p>
         </div>
         <div className="rounded-panel bg-slate-50 px-3 py-2 text-right">
@@ -195,6 +199,23 @@ function SupplierCard({
             {supplier.city || "Sin ciudad"}, {supplier.country || "Sin pais"}
           </span>
         </span>
+      </div>
+
+      <div className="grid gap-2 rounded-panel border border-border-subtle bg-slate-50 p-3 text-xs text-text-secondary">
+        <p>
+          <span className="font-semibold text-text-primary">Fuente:</span>{" "}
+          {source?.source_title || source?.source_name || source?.provider_name || "Sin fuente registrada"}
+        </p>
+        {source?.source_url ? <p className="truncate">{source.source_url}</p> : null}
+        {source?.query ? (
+          <p>
+            <span className="font-semibold text-text-primary">Consulta:</span> {source.query}
+          </p>
+        ) : null}
+        <p>
+          <span className="font-semibold text-text-primary">Por que coincide:</span>{" "}
+          {bestMatch?.reason || bestMatch?.reasons?.[0] || "Sin razon de coincidencia disponible"}
+        </p>
       </div>
 
       <div className="flex flex-wrap gap-2 border-t border-border-subtle pt-4">
@@ -341,4 +362,3 @@ function Metric({ label, value }: { label: string; value: string | number }) {
     </div>
   );
 }
-
