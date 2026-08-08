@@ -11,6 +11,8 @@ class ProductStatus(StrEnum):
     PENDING_REVIEW = "pending_review"
     APPROVED = "approved"
     REJECTED = "rejected"
+    QUOTED = "quoted"
+    COMPARED = "compared"
 
 
 class AIExtractionRunStatus(StrEnum):
