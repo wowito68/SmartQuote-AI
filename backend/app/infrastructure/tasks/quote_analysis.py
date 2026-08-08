@@ -4,7 +4,10 @@ from uuid import UUID
 
 from celery import Task
 
-from app.application.services.extraction_strategy import ExtractionPolicy, FallbackDocumentTextExtractor
+from app.application.services.extraction_strategy import (
+    ExtractionPolicy,
+    FallbackDocumentTextExtractor,
+)
 from app.application.use_cases.quotes import ProcessSupplierQuote
 from app.config.settings import get_settings
 from app.domain.quotes.exceptions import QuoteExtractionFailure
