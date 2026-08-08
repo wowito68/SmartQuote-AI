@@ -12,6 +12,12 @@ from app.infrastructure.db.models.document_processing import (
     DocumentQualityModel,
     ExtractionRunModel,
 )
+from app.infrastructure.db.models.quote import (
+    ComparisonRunModel,
+    QuoteExtractionRunModel,
+    QuoteItemModel,
+    QuoteModel,
+)
 from app.infrastructure.db.models.rfq import (
     EmailAttachmentModel,
     EmailMessageModel,
@@ -36,6 +42,7 @@ __all__ = [
     "CatalogProductModel",
     "CatalogProductRevisionModel",
     "CatalogSnapshotModel",
+    "ComparisonRunModel",
     "EvidenceReferenceModel",
     "EmailAttachmentModel",
     "EmailMessageModel",
@@ -45,6 +52,9 @@ __all__ = [
     "ExtractionRunModel",
     "OutboundMessageLogModel",
     "ProductSupplierMatchModel",
+    "QuoteExtractionRunModel",
+    "QuoteItemModel",
+    "QuoteModel",
     "RfqRequestModel",
     "SupplierContactModel",
     "SupplierDiscoveryRunModel",
