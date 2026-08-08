@@ -21,7 +21,11 @@ class ComparisonEngine:
 
         by_product: dict[str, list[tuple[str, str, QuoteItem]]] = defaultdict(list)
         for supplier_id, supplier_name, item in entries:
-            key = str(item.catalog_product_id) if item.catalog_product_id else item.product_name.casefold()
+            key = (
+                str(item.catalog_product_id)
+                if item.catalog_product_id
+                else item.product_name.casefold()
+            )
             by_product[key].append((supplier_id, supplier_name, item))
 
         rows: list[dict[str, Any]] = []
@@ -65,7 +69,10 @@ class ComparisonEngine:
                         delivery = Decimal("1")
                     else:
                         baseline = max(minimum_delivery, 1)
-                        delivery = min(Decimal("1"), Decimal(baseline) / Decimal(item.delivery_days))
+                        delivery = min(
+                            Decimal("1"),
+                            Decimal(baseline) / Decimal(item.delivery_days),
+                        )
                 else:
                     delivery = Decimal("0.5")
                     row_warnings.append("Delivery time is incomplete.")
@@ -80,15 +87,21 @@ class ComparisonEngine:
                 warnings.extend(row_warnings)
                 rows.append(
                     {
-                        "catalog_product_id": str(item.catalog_product_id) if item.catalog_product_id else None,
+                        "catalog_product_id": (
+                            str(item.catalog_product_id) if item.catalog_product_id else None
+                        ),
                         "product": item.product_name,
                         "supplier_id": supplier_id,
                         "supplier": supplier_name,
                         "brand": item.brand,
                         "model": item.model,
                         "quantity": str(item.quantity) if item.quantity is not None else None,
-                        "unit_price": str(item.unit_price) if item.unit_price is not None else None,
-                        "total_price": str(item.total_price) if item.total_price is not None else None,
+                        "unit_price": (
+                            str(item.unit_price) if item.unit_price is not None else None
+                        ),
+                        "total_price": (
+                            str(item.total_price) if item.total_price is not None else None
+                        ),
                         "currency": item.currency,
                         "delivery_days": item.delivery_days,
                         "technical_compliance": item.technical_compliance,
