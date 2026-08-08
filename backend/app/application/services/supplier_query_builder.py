@@ -1,6 +1,6 @@
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Iterable
 
 from app.application.ports.supplier_search_service import SupplierSearchProduct
 

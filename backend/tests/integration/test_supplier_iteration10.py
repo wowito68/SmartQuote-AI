@@ -3,9 +3,9 @@ from uuid import UUID
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 from tests.integration.test_supplier_discovery_pipeline import (
+    SYSTEM_USER_ID,
     FakeSupplierSearchService,
     RecordingSupplierQueue,
-    SYSTEM_USER_ID,
     configure_dependencies,
     create_approved_catalog,
 )
@@ -59,9 +59,7 @@ def test_iteration10_supplier_flow_is_traceable_refreshable_and_review_gated() -
         first_run = queue.run_ids[-1]
         _process(first_run, search_service)
 
-        candidates = client.get(
-            f"/api/v1/tenders/{tender_id}/supplier-candidates"
-        )
+        candidates = client.get(f"/api/v1/tenders/{tender_id}/supplier-candidates")
         assert candidates.status_code == 200, candidates.text
         candidate_rows = candidates.json()["candidates"]
         assert len(candidate_rows) == 3

@@ -47,7 +47,12 @@ def upgrade() -> None:
 
     with op.batch_alter_table("product_supplier_matches") as batch_op:
         batch_op.add_column(
-            sa.Column("match_status", sa.String(length=20), server_default="candidate", nullable=False)
+            sa.Column(
+                "match_status",
+                sa.String(length=20),
+                server_default="candidate",
+                nullable=False,
+            )
         )
         batch_op.add_column(sa.Column("source_url", sa.String(length=2000), nullable=True))
         batch_op.add_column(sa.Column("reason", sa.Text(), nullable=True))

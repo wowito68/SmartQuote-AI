@@ -1,5 +1,3 @@
-from uuid import uuid4
-
 from app.application.ports.supplier_search_service import (
     SupplierContactSuggestion,
     SupplierSuggestion,

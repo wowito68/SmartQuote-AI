@@ -14,11 +14,26 @@ def normalize_name(value: str | None) -> str:
     return _NON_ALNUM.sub(" ", ascii_value.casefold()).strip()
 
 
+def _safe_urlparse(value: str):
+    try:
+        parsed = urlparse(value)
+        _ = parsed.port
+    except ValueError:
+        return None
+    return parsed
+
+
 def normalize_domain(value: str | None) -> str | None:
     if not value:
         return None
-    parsed = urlparse(value if "://" in value else f"https://{value}")
-    if parsed.username or parsed.password:
+    raw = value.strip()
+    explicit = _safe_urlparse(raw)
+    if explicit is None:
+        return None
+    if explicit.scheme and explicit.scheme not in {"http", "https"}:
+        return None
+    parsed = _safe_urlparse(raw if "://" in raw else f"https://{raw}")
+    if parsed is None or parsed.username or parsed.password:
         return None
     host = (parsed.hostname or "").casefold().strip(".")
     if host.startswith("www."):
@@ -30,8 +45,13 @@ def normalize_http_url(value: str | None) -> str | None:
     if not value:
         return None
     raw = value.strip()
-    parsed = urlparse(raw if "://" in raw else f"https://{raw}")
-    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+    explicit = _safe_urlparse(raw)
+    if explicit is None:
+        return None
+    if explicit.scheme and explicit.scheme not in {"http", "https"}:
+        return None
+    parsed = _safe_urlparse(raw if "://" in raw else f"https://{raw}")
+    if parsed is None or parsed.scheme not in {"http", "https"} or not parsed.hostname:
         return None
     if parsed.username or parsed.password:
         return None
@@ -39,7 +59,10 @@ def normalize_http_url(value: str | None) -> str | None:
     if host.startswith("www."):
         host = host[4:]
     port = parsed.port
-    if port and not ((parsed.scheme == "http" and port == 80) or (parsed.scheme == "https" and port == 443)):
+    default_port = (parsed.scheme == "http" and port == 80) or (
+        parsed.scheme == "https" and port == 443
+    )
+    if port and not default_port:
         host = f"{host}:{port}"
     path = parsed.path or ""
     if path != "/":

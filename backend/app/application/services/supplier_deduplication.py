@@ -40,15 +40,17 @@ class SupplierDuplicateResult:
 
 class SupplierDeduplicationService:
     version = "2.0.0"
+    suggestion_threshold = 0.40
 
     def __init__(
         self,
         weights: SupplierDeduplicationWeights | None = None,
         *,
-        suggestion_threshold: float = 0.40,
+        suggestion_threshold: float | None = None,
     ) -> None:
         self.weights = weights or SupplierDeduplicationWeights()
-        self.suggestion_threshold = suggestion_threshold
+        if suggestion_threshold is not None:
+            self.suggestion_threshold = suggestion_threshold
 
     def compare(
         self,

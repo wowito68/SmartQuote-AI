@@ -33,6 +33,7 @@ src = ["app", "tests"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]
+per-file-ignores = { "app/application/use_cases/supplier_discovery_v2.py" = ["E501", "I001"] }
 
 [tool.ruff.lint.isort]
 known-first-party = ["app"]

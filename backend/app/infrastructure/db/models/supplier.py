@@ -160,7 +160,9 @@ class SupplierSourceModel(Base):
     )
     query: Mapped[str | None] = mapped_column(String(2000), nullable=True)
     source_name: Mapped[str | None] = mapped_column(String(500), nullable=True)
-    source_metadata: Mapped[dict[str, Any]] = mapped_column("metadata", JSON, nullable=False, default=dict)
+    source_metadata: Mapped[dict[str, Any]] = mapped_column(
+        "metadata", JSON, nullable=False, default=dict
+    )
     discovered_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
