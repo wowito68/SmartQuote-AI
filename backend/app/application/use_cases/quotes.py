@@ -34,6 +34,11 @@ from app.domain.quotes.exceptions import (
     QuoteNotFound,
 )
 from app.domain.quotes.value_objects import QuoteExtractionRunStatus, QuoteStatus
+from app.domain.quotes.workflow import (
+    mark_product_compared,
+    mark_rfq_responded,
+    mark_supplier_responded,
+)
 from app.domain.rfqs.value_objects import RfqStatus
 from app.domain.suppliers.exceptions import SupplierNotFound
 from app.domain.suppliers.value_objects import SupplierStatus
@@ -43,12 +48,31 @@ logger = logging.getLogger(__name__)
 
 
 def _schema_hash(schema: dict) -> str:
-    return hashlib.sha256(
-        json.dumps(schema, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()
-    ).hexdigest()
+    payload = json.dumps(schema, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    return hashlib.sha256(payload.encode()).hexdigest()
 
 
 def _quote_response(uow, quote: Quote) -> QuoteResponse:
+    items = tuple(
+        QuoteItemResponse(
+            id=item.id,
+            catalog_product_id=item.catalog_product_id,
+            product_name=item.product_name,
+            brand=item.brand,
+            model=item.model,
+            quantity=item.quantity,
+            unit_price=item.unit_price,
+            total_price=item.total_price,
+            currency=item.currency,
+            delivery_days=item.delivery_days,
+            technical_compliance=item.technical_compliance,
+            notes=item.notes,
+            source_page=item.source_page,
+            evidence_fragment=item.evidence_fragment,
+            confidence=item.confidence,
+        )
+        for item in uow.quotes.list_items(quote.id)
+    )
     return QuoteResponse(
         id=quote.id,
         tender_id=quote.tender_id,
@@ -65,26 +89,7 @@ def _quote_response(uow, quote: Quote) -> QuoteResponse:
         reviewed_at=quote.reviewed_at,
         rejection_reason=quote.rejection_reason,
         last_error=quote.last_error,
-        items=tuple(
-            QuoteItemResponse(
-                id=item.id,
-                catalog_product_id=item.catalog_product_id,
-                product_name=item.product_name,
-                brand=item.brand,
-                model=item.model,
-                quantity=item.quantity,
-                unit_price=item.unit_price,
-                total_price=item.total_price,
-                currency=item.currency,
-                delivery_days=item.delivery_days,
-                technical_compliance=item.technical_compliance,
-                notes=item.notes,
-                source_page=item.source_page,
-                evidence_fragment=item.evidence_fragment,
-                confidence=item.confidence,
-            )
-            for item in uow.quotes.list_items(quote.id)
-        ),
+        items=items,
         created_at=quote.created_at,
         updated_at=quote.updated_at,
     )
@@ -113,7 +118,7 @@ def _decimal(value: object) -> Decimal | None:
     except (InvalidOperation, TypeError, ValueError) as exc:
         raise QuoteExtractionFailure("AI quote response contains an invalid numeric value.") from exc
     if not result.is_finite() or result < 0:
-        raise QuoteExtractionFailure("AI quote response contains a non-finite numeric value.")
+        raise QuoteExtractionFailure("AI quote response contains an invalid numeric value.")
     return result
 
 
@@ -140,6 +145,17 @@ def _match_catalog_product(snapshot_products: tuple[dict, ...], name: str) -> UU
     if not exact and len(partial) == 1:
         return partial[0]
     return None
+
+
+def _advance_to_quote_analysis(tender, *, catalog_ready: bool, supplier_ready: bool, rfq_sent: bool) -> None:
+    if tender.status is TenderStatus.CATALOG_REVIEW and catalog_ready:
+        tender.change_status(TenderStatus.SUPPLIER_REVIEW)
+    if tender.status is TenderStatus.SUPPLIER_REVIEW and supplier_ready:
+        tender.change_status(TenderStatus.RFQ_READY)
+    if tender.status is TenderStatus.RFQ_READY and rfq_sent:
+        tender.change_status(TenderStatus.WAITING_QUOTES)
+    if tender.status is TenderStatus.WAITING_QUOTES:
+        tender.change_status(TenderStatus.QUOTE_ANALYSIS)
 
 
 class UploadSupplierQuote:
@@ -191,11 +207,7 @@ class UploadSupplierQuote:
                 raise DuplicateQuote("The same supplier quote is already registered for this tender.")
             quote_id = uuid4()
             try:
-                storage_key = self._file_storage.store(
-                    command.tender_id,
-                    quote_id,
-                    validated.content,
-                )
+                storage_key = self._file_storage.store(command.tender_id, quote_id, validated.content)
                 quote = Quote(
                     id=quote_id,
                     tender_id=command.tender_id,
@@ -210,25 +222,24 @@ class UploadSupplierQuote:
                 )
                 quote.start_validation()
                 quote = uow.quotes.create_quote(quote)
-                if tender_supplier.status is SupplierStatus.APPROVED:
-                    tender_supplier.mark_contacted()
-                if tender_supplier.status is SupplierStatus.CONTACTED:
-                    tender_supplier.mark_responded()
+                mark_supplier_responded(tender_supplier)
                 uow.suppliers.update_tender_supplier(tender_supplier)
                 for rfq in sent_rfqs:
-                    if rfq.status in {RfqStatus.SENT, RfqStatus.DELIVERED}:
-                        rfq.mark_responded()
-                        uow.rfqs.update_rfq(rfq)
-                if tender.status is TenderStatus.WAITING_QUOTES:
-                    tender.change_status(TenderStatus.QUOTE_ANALYSIS)
-                    uow.tenders.update(tender)
+                    mark_rfq_responded(rfq)
+                    uow.rfqs.update_rfq(rfq)
+                _advance_to_quote_analysis(
+                    tender,
+                    catalog_ready=uow.catalogs.get_latest_snapshot(command.tender_id) is not None,
+                    supplier_ready=True,
+                    rfq_sent=True,
+                )
+                uow.tenders.update(tender)
                 uow.audit_events.append(
                     quote_event(
                         quote.id,
                         "QuoteUploaded",
                         tender_id=str(quote.tender_id),
                         supplier_id=str(quote.supplier_id),
-                        tender_supplier_id=str(quote.tender_supplier_id),
                         uploaded_by_user_id=str(command.uploaded_by_user_id),
                         file_hash=quote.file_hash,
                         file_size=quote.file_size,
@@ -284,19 +295,18 @@ class ProcessSupplierQuote:
             quote = uow.quotes.get_quote(quote_id, for_update=True)
             if quote is None:
                 raise QuoteNotFound("Quote was not found.")
-            key = hashlib.sha256(
-                "|".join(
-                    (
-                        quote.file_hash,
-                        str(quote.tender_id),
-                        str(quote.supplier_id),
-                        self._text_extractor.version,
-                        prompt.version,
-                        self._model,
-                        schema_hash,
-                    )
-                ).encode()
-            ).hexdigest()
+            key_data = "|".join(
+                (
+                    quote.file_hash,
+                    str(quote.tender_id),
+                    str(quote.supplier_id),
+                    self._text_extractor.version,
+                    prompt.version,
+                    self._model,
+                    schema_hash,
+                )
+            )
+            key = hashlib.sha256(key_data.encode()).hexdigest()
             existing = uow.quotes.get_run_by_key(quote.id, key)
             if existing and existing.status in {
                 QuoteExtractionRunStatus.COMPLETED,
@@ -323,18 +333,13 @@ class ProcessSupplierQuote:
             if quote.status is QuoteStatus.VALIDATING:
                 quote.start_extraction()
             elif quote.status is not QuoteStatus.EXTRACTING:
-                if quote.status in {
-                    QuoteStatus.EXTRACTED,
-                    QuoteStatus.NORMALIZED,
-                    QuoteStatus.PENDING_REVIEW,
-                    QuoteStatus.APPROVED,
-                    QuoteStatus.INCLUDED_IN_COMPARISON,
-                } and uow.quotes.list_items(quote.id):
+                if uow.quotes.list_items(quote.id):
                     return quote.id
                 raise InvalidQuoteState("Quote is not ready for extraction.")
             run.start()
             uow.quotes.update_quote(quote)
             run = uow.quotes.update_run(run)
+            storage_key = quote.storage_key
             uow.audit_events.append(
                 quote_event(
                     run.id,
@@ -342,14 +347,12 @@ class ProcessSupplierQuote:
                     aggregate_type="quote_extraction",
                     quote_id=str(quote.id),
                     tender_id=str(quote.tender_id),
-                    supplier_id=str(quote.supplier_id),
                     model=run.model,
                     prompt_version=run.prompt_version,
                     schema_version=run.schema_version,
                     extractor_version=run.extractor_version,
                 )
             )
-            storage_key = quote.storage_key
             uow.commit()
 
         try:
@@ -358,7 +361,7 @@ class ProcessSupplierQuote:
                 {"page_number": page.page_number, "text": page.text}
                 for page in text_result.pages
             )
-            if not pages or not any(page["text"].strip() for page in pages):
+            if not pages or not any(str(page["text"]).strip() for page in pages):
                 raise QuoteExtractionFailure("Quote PDF does not contain extractable text.")
             ai_result = self._ai_service.extract(
                 AIExtractionRequest(
@@ -372,7 +375,9 @@ class ProcessSupplierQuote:
             raw_items = ai_result.payload.get("items")
             if not isinstance(raw_items, list) or not raw_items:
                 raise QuoteExtractionFailure("AI quote response must contain at least one item.")
-            page_text = {int(page["page_number"]): " ".join(str(page["text"]).split()) for page in pages}
+            page_text = {
+                int(page["page_number"]): " ".join(str(page["text"]).split()) for page in pages
+            }
             with self._uow_factory() as uow:
                 current = uow.quotes.get_quote(quote_id, for_update=True)
                 current_run = uow.quotes.get_run(run.id, for_update=True)
@@ -389,38 +394,33 @@ class ProcessSupplierQuote:
                     if not name:
                         raise QuoteExtractionFailure("AI quote item is missing product_name.")
                     evidence = raw.get("evidence") or {}
-                    page = evidence.get("page")
+                    page = int(evidence.get("page") or 0)
                     fragment = " ".join(str(evidence.get("fragment") or "").split())
-                    if page is not None:
-                        page = int(page)
-                        if page not in page_text:
-                            raise QuoteExtractionFailure("Quote evidence references a missing page.")
-                        if fragment and fragment not in page_text[page]:
-                            raise QuoteExtractionFailure(
-                                "Quote evidence fragment is not present in the referenced page."
-                            )
-                    item = QuoteItem(
-                        quote_id=current.id,
-                        catalog_product_id=_match_catalog_product(snapshot.products, name),
-                        product_name=name,
-                        brand=raw.get("brand"),
-                        model=raw.get("model"),
-                        quantity=_decimal(raw.get("quantity")),
-                        unit_price=_decimal(raw.get("unit_price")),
-                        total_price=_decimal(raw.get("total_price")),
-                        currency=raw.get("currency"),
-                        delivery_days=(
-                            int(raw["delivery_days"])
-                            if raw.get("delivery_days") is not None
-                            else None
-                        ),
-                        technical_compliance=raw.get("technical_compliance"),
-                        notes=raw.get("notes"),
-                        source_page=page,
-                        evidence_fragment=fragment or None,
-                        confidence=float(evidence.get("confidence") or 0.0),
+                    if page not in page_text or not fragment or fragment not in page_text[page]:
+                        raise QuoteExtractionFailure("Quote evidence is not grounded in its source page.")
+                    items.append(
+                        QuoteItem(
+                            quote_id=current.id,
+                            catalog_product_id=_match_catalog_product(snapshot.products, name),
+                            product_name=name,
+                            brand=raw.get("brand"),
+                            model=raw.get("model"),
+                            quantity=_decimal(raw.get("quantity")),
+                            unit_price=_decimal(raw.get("unit_price")),
+                            total_price=_decimal(raw.get("total_price")),
+                            currency=raw.get("currency"),
+                            delivery_days=(
+                                int(raw["delivery_days"])
+                                if raw.get("delivery_days") is not None
+                                else None
+                            ),
+                            technical_compliance=raw.get("technical_compliance"),
+                            notes=raw.get("notes"),
+                            source_page=page,
+                            evidence_fragment=fragment,
+                            confidence=float(evidence.get("confidence") or 0),
+                        )
                     )
-                    items.append(item)
                 uow.quotes.replace_items(current.id, tuple(items))
                 current.mark_extracted()
                 current.mark_normalized()
@@ -490,7 +490,7 @@ class ListTenderQuotes:
         with self._uow_factory() as uow:
             if uow.tenders.get_by_id(tender_id) is None:
                 raise TenderNotFound("Tender was not found.")
-            return tuple(_quote_response(uow, quote) for quote in uow.quotes.list_quotes(tender_id))
+            return tuple(_quote_response(uow, item) for item in uow.quotes.list_quotes(tender_id))
 
 
 class ReviewQuote:
@@ -556,21 +556,20 @@ class GenerateTenderComparison:
             if not quotes:
                 raise ComparisonNotReady("Comparison requires at least one approved quote.")
             version_payload = [
-                f"{quote.id}:{quote.version}:{quote.file_hash}"
-                for quote in sorted(quotes, key=lambda item: str(item.id))
+                f"{item.id}:{item.version}:{item.file_hash}"
+                for item in sorted(quotes, key=lambda value: str(value.id))
             ]
             approved_quotes_version = hashlib.sha256("|".join(version_payload).encode()).hexdigest()
-            key = hashlib.sha256(
-                "|".join(
-                    (
-                        str(tender_id),
-                        str(snapshot.id),
-                        str(snapshot.version),
-                        approved_quotes_version,
-                        self._scoring_config_version,
-                    )
-                ).encode()
-            ).hexdigest()
+            key_data = "|".join(
+                (
+                    str(tender_id),
+                    str(snapshot.id),
+                    str(snapshot.version),
+                    approved_quotes_version,
+                    self._scoring_config_version,
+                )
+            )
+            key = hashlib.sha256(key_data.encode()).hexdigest()
             existing = uow.quotes.get_comparison_by_key(tender_id, key)
             if existing is not None:
                 return _comparison_response(existing)
@@ -580,8 +579,16 @@ class GenerateTenderComparison:
                 supplier = uow.suppliers.get_supplier(quote.supplier_id)
                 if supplier is None:
                     raise SupplierNotFound("Quote supplier was not found.")
-                for item in uow.quotes.list_items(quote.id):
-                    entries.append((str(supplier.id), supplier.display_name, item))
+                supplier_name = (
+                    supplier.trade_name
+                    or supplier.legal_name
+                    or supplier.normalized_domain
+                    or str(supplier.id)
+                )
+                entries.extend(
+                    (str(supplier.id), supplier_name, item)
+                    for item in uow.quotes.list_items(quote.id)
+                )
             rows, recommendation = self._engine.build(entries)
             comparison = uow.quotes.create_comparison(
                 ComparisonRun(
@@ -595,19 +602,20 @@ class GenerateTenderComparison:
                     generated_by_user_id=generated_by_user_id,
                 )
             )
-            compared_products: set[UUID] = set()
+            product_ids: set[UUID] = set()
             for quote in quotes:
                 if quote.status is QuoteStatus.APPROVED:
                     quote.include_in_comparison()
                     uow.quotes.update_quote(quote)
-                for item in uow.quotes.list_items(quote.id):
-                    if item.catalog_product_id:
-                        compared_products.add(item.catalog_product_id)
-            for product_id in compared_products:
+                product_ids.update(
+                    item.catalog_product_id
+                    for item in uow.quotes.list_items(quote.id)
+                    if item.catalog_product_id is not None
+                )
+            for product_id in product_ids:
                 product = uow.catalogs.get_product(product_id)
                 if product is not None:
-                    product.mark_quoted()
-                    product.mark_compared()
+                    mark_product_compared(product)
                     uow.catalogs.update_product(product)
             if tender.status is TenderStatus.QUOTE_ANALYSIS:
                 tender.change_status(TenderStatus.COMPARISON_READY)
