@@ -56,13 +56,28 @@ def test_deadline_cannot_be_before_creation() -> None:
 
 def test_valid_status_transitions_are_forward_only() -> None:
     tender = Tender(title="Valid", created_by_user_id=uuid4())
-    tender.change_status(TenderStatus.DOCUMENTS_PENDING)
-    tender.change_status(TenderStatus.DOCUMENTS_PROCESSING)
-    tender.change_status(TenderStatus.CATALOG_REVIEW)
-    tender.change_status(TenderStatus.CLOSED)
+    for target in (
+        TenderStatus.DOCUMENTS_PENDING,
+        TenderStatus.DOCUMENTS_PROCESSING,
+        TenderStatus.CATALOG_REVIEW,
+        TenderStatus.SUPPLIER_REVIEW,
+        TenderStatus.RFQ_READY,
+        TenderStatus.WAITING_QUOTES,
+        TenderStatus.QUOTE_ANALYSIS,
+        TenderStatus.COMPARISON_READY,
+        TenderStatus.AWARDED,
+        TenderStatus.CLOSED,
+    ):
+        tender.change_status(target)
     assert tender.status is TenderStatus.CLOSED
     with pytest.raises(InvalidTenderState):
         tender.change_status(TenderStatus.DRAFT)
+
+
+def test_tender_rejects_state_skips() -> None:
+    tender = Tender(title="Valid", created_by_user_id=uuid4())
+    with pytest.raises(InvalidTenderState):
+        tender.change_status(TenderStatus.CATALOG_REVIEW)
 
 
 def test_archived_tender_cannot_be_modified_or_archived_twice() -> None:
