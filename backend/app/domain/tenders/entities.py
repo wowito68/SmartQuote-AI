@@ -19,7 +19,25 @@ _ALLOWED_STATUS_TRANSITIONS: dict[TenderStatus, frozenset[TenderStatus]] = {
     TenderStatus.DOCUMENTS_PROCESSING: frozenset(
         {TenderStatus.CATALOG_REVIEW, TenderStatus.CANCELLED}
     ),
-    TenderStatus.CATALOG_REVIEW: frozenset({TenderStatus.CLOSED, TenderStatus.CANCELLED}),
+    TenderStatus.CATALOG_REVIEW: frozenset(
+        {TenderStatus.SUPPLIER_REVIEW, TenderStatus.CANCELLED}
+    ),
+    TenderStatus.SUPPLIER_REVIEW: frozenset(
+        {TenderStatus.RFQ_READY, TenderStatus.CANCELLED}
+    ),
+    TenderStatus.RFQ_READY: frozenset(
+        {TenderStatus.WAITING_QUOTES, TenderStatus.CANCELLED}
+    ),
+    TenderStatus.WAITING_QUOTES: frozenset(
+        {TenderStatus.QUOTE_ANALYSIS, TenderStatus.CANCELLED}
+    ),
+    TenderStatus.QUOTE_ANALYSIS: frozenset(
+        {TenderStatus.COMPARISON_READY, TenderStatus.CANCELLED}
+    ),
+    TenderStatus.COMPARISON_READY: frozenset(
+        {TenderStatus.AWARDED, TenderStatus.CLOSED, TenderStatus.CANCELLED}
+    ),
+    TenderStatus.AWARDED: frozenset({TenderStatus.CLOSED}),
     TenderStatus.CANCELLED: frozenset(),
     TenderStatus.CLOSED: frozenset(),
 }
