@@ -10,7 +10,7 @@ Environment = Literal["local", "test", "staging", "production"]
 
 class Settings(BaseSettings):
     project_name: str = Field(default="SmartQuote AI")
-    version: str = Field(default="0.5.0")
+    version: str = Field(default="0.6.0")
     environment: Environment = Field(default="local")
     api_v1_prefix: str = Field(default="/api/v1")
     database_url: SecretStr
@@ -39,9 +39,11 @@ class Settings(BaseSettings):
     openai_timeout_seconds: float = Field(default=90.0, gt=0, le=600)
     ai_model: str = Field(default="gpt-5-mini")
     ai_prompt_version: str = Field(default="1.0.0")
+    quote_ai_prompt_version: str = Field(default="1.0.0")
     ai_temperature: float = Field(default=0.0, ge=0, le=2)
     ai_input_cost_per_million_tokens: float = Field(default=0.0, ge=0)
     ai_output_cost_per_million_tokens: float = Field(default=0.0, ge=0)
+    comparison_scoring_config_version: str = Field(default="mvp-1")
 
     supplier_directory_path: Path = Field(
         default=Path("app/supplier_sources/default_directory.json")
