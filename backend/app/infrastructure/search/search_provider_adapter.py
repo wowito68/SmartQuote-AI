@@ -1,6 +1,7 @@
 import json
 import re
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -11,6 +12,7 @@ from app.application.ports.supplier_search_service import (
     SupplierSearchService,
     SupplierSuggestion,
 )
+from app.application.services.supplier_normalization import normalize_http_url
 from app.domain.suppliers.exceptions import SupplierSearchFailure
 
 _TOKEN_PATTERN = re.compile(r"[a-z0-9]+", re.IGNORECASE)
@@ -65,11 +67,7 @@ class SearchProviderClient(Protocol):
 
 
 class JsonDirectorySearchClient:
-    """Deterministic local directory client used by the first adapter implementation.
-
-    The JSON file is infrastructure configuration, not domain data. It can be replaced by
-    a web, API or enterprise-directory client without modifying Application or Domain.
-    """
+    """Deterministic local directory client used by the current provider adapter."""
 
     provider_name = "json-directory"
     provider_version = "1.0.0"
@@ -165,7 +163,7 @@ class JsonDirectorySearchClient:
 
 
 class SearchProviderAdapter(SupplierSearchService):
-    """Maps a search provider client into the Application search port."""
+    """Map a replaceable search-provider client into the Application search port."""
 
     def __init__(self, client: SearchProviderClient) -> None:
         self._client = client
@@ -179,19 +177,9 @@ class SearchProviderAdapter(SupplierSearchService):
         return self._client.provider_version
 
     def search(self, request: SupplierSearchRequest) -> SupplierSearchResponse:
-        query = " ".join(
-            value
-            for value in (
-                request.product.name,
-                request.product.description,
-                request.product.category,
-                " ".join(
-                    f"{key} {value}"
-                    for key, value in request.product.specifications.items()
-                ),
-            )
-            if value
-        )
+        query = request.query.strip()
+        if not query:
+            raise SupplierSearchFailure("Supplier search request requires a deterministic query.")
         try:
             records = self._client.search(
                 query=query,
@@ -203,32 +191,47 @@ class SearchProviderAdapter(SupplierSearchService):
             raise
         except Exception as exc:
             raise SupplierSearchFailure(str(exc)) from exc
-        suggestions = tuple(
-            SupplierSuggestion(
-                legal_name=record.legal_name,
-                trade_name=record.trade_name,
-                website=record.website,
-                category=record.category,
-                country=record.country,
-                city=record.city,
-                description=record.description,
-                source_url=record.source_url,
-                source_title=record.source_title,
-                source_type=record.source_type,
-                source_excerpt=record.source_excerpt,
-                contacts=tuple(
-                    SupplierContactSuggestion(
-                        contact_type=contact.contact_type,
-                        value=contact.value,
-                        confidence=contact.confidence,
-                        source_url=contact.source_url,
-                        contact_name=contact.contact_name,
-                        role=contact.role,
-                    )
-                    for contact in record.contacts
-                ),
-                metadata=record.metadata,
+
+        searched_at = datetime.now(UTC)
+        suggestions: list[SupplierSuggestion] = []
+        provider_errors: list[str] = []
+        for record in records:
+            if normalize_http_url(record.source_url) is None:
+                provider_errors.append("Search result discarded because source URL is not HTTP(S).")
+                continue
+            suggestions.append(
+                SupplierSuggestion(
+                    legal_name=record.legal_name,
+                    trade_name=record.trade_name,
+                    website=record.website,
+                    category=record.category,
+                    country=record.country,
+                    city=record.city,
+                    description=record.description,
+                    source_url=record.source_url,
+                    source_title=record.source_title,
+                    source_type=record.source_type,
+                    source_excerpt=record.source_excerpt,
+                    contacts=tuple(
+                        SupplierContactSuggestion(
+                            contact_type=contact.contact_type,
+                            value=contact.value,
+                            confidence=contact.confidence,
+                            source_url=contact.source_url,
+                            contact_name=contact.contact_name,
+                            role=contact.role,
+                        )
+                        for contact in record.contacts
+                    ),
+                    metadata=dict(record.metadata),
+                    query=query,
+                    searched_at=searched_at,
+                    search_provider=self.provider_name,
+                    initial_score=float(record.metadata.get("directory_score", 0.0)),
+                )
             )
-            for record in records
+        return SupplierSearchResponse(
+            suggestions=tuple(suggestions),
+            provider_errors=tuple(provider_errors),
+            estimated_cost_usd=0.0,
         )
-        return SupplierSearchResponse(suggestions=suggestions)
