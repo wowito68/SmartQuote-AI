@@ -39,7 +39,10 @@ FileStorageDependency = Annotated[FileStorage, Depends(get_file_storage)]
 QuoteQueueDependency = Annotated[QuoteAnalysisQueue, Depends(get_quote_analysis_queue)]
 SettingsDependency = Annotated[Settings, Depends(get_settings)]
 ERROR_RESPONSES = {
-    404: {"model": ErrorResponseSchema, "description": "Tender, supplier, quote or comparison not found"},
+    404: {
+        "model": ErrorResponseSchema,
+        "description": "Tender, supplier, quote or comparison not found",
+    },
     409: {"model": ErrorResponseSchema, "description": "Invalid state or duplicate quote"},
     413: {"model": ErrorResponseSchema, "description": "Quote PDF exceeds configured limit"},
     422: {"model": ErrorResponseSchema, "description": "Invalid quote PDF or review payload"},
