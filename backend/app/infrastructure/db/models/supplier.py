@@ -138,8 +138,9 @@ class SupplierContactModel(Base):
 class SupplierSourceModel(Base):
     __tablename__ = "supplier_sources"
     __table_args__ = (
-        UniqueConstraint("supplier_id", "source_url", name="uq_supplier_sources_url"),
         Index("ix_supplier_sources_supplier_id", "supplier_id"),
+        Index("ix_supplier_sources_discovery_run_id", "discovery_run_id"),
+        Index("ix_supplier_sources_product_id", "product_id"),
     )
 
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True)
@@ -151,6 +152,15 @@ class SupplierSourceModel(Base):
     source_url: Mapped[str] = mapped_column(String(2000), nullable=False)
     source_title: Mapped[str | None] = mapped_column(String(500), nullable=True)
     excerpt: Mapped[str | None] = mapped_column(Text, nullable=True)
+    discovery_run_id: Mapped[UUID | None] = mapped_column(
+        Uuid, ForeignKey("supplier_discovery_runs.id", ondelete="SET NULL"), nullable=True
+    )
+    product_id: Mapped[UUID | None] = mapped_column(
+        Uuid, ForeignKey("catalog_products.id", ondelete="SET NULL"), nullable=True
+    )
+    query: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    source_name: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    source_metadata: Mapped[dict[str, Any]] = mapped_column("metadata", JSON, nullable=False, default=dict)
     discovered_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
@@ -158,8 +168,8 @@ class TenderSupplierModel(Base):
     __tablename__ = "tender_suppliers"
     __table_args__ = (
         CheckConstraint(
-            "status IN ('candidate', 'contacts_found', 'pending_review', "
-            "'approved', 'rejected', 'merged')",
+            "status IN ('candidate', 'contacts_found', 'pending_review', 'approved', "
+            "'rejected', 'merged', 'contacted', 'responded', 'inactive')",
             name="valid_tender_supplier_status",
         ),
         UniqueConstraint("tender_id", "supplier_id", name="uq_tender_suppliers_master"),
@@ -202,6 +212,10 @@ class TenderSupplierModel(Base):
 class ProductSupplierMatchModel(Base):
     __tablename__ = "product_supplier_matches"
     __table_args__ = (
+        CheckConstraint(
+            "match_status IN ('candidate', 'confirmed', 'rejected')",
+            name="valid_product_supplier_match_status",
+        ),
         UniqueConstraint(
             "tender_supplier_id", "product_id", name="uq_product_supplier_match"
         ),
@@ -220,6 +234,9 @@ class ProductSupplierMatchModel(Base):
     components: Mapped[dict[str, float]] = mapped_column(JSON, nullable=False)
     reasons: Mapped[list[str]] = mapped_column(JSON, nullable=False)
     algorithm_version: Mapped[str] = mapped_column(String(100), nullable=False)
+    match_status: Mapped[str] = mapped_column(String(20), nullable=False, default="candidate")
+    source_url: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

@@ -17,6 +17,7 @@ from app.domain.suppliers.value_objects import (
     SupplierDiscoveryRunStatus,
     SupplierDiscoveryStage,
     SupplierMatchScore,
+    SupplierMatchStatus,
     SupplierStatus,
 )
 
@@ -58,6 +59,9 @@ _SUPPLIER_TRANSITIONS = {
     SupplierStatus.APPROVED: {SupplierStatus.MERGED},
     SupplierStatus.REJECTED: set(),
     SupplierStatus.MERGED: set(),
+    SupplierStatus.CONTACTED: {SupplierStatus.RESPONDED, SupplierStatus.INACTIVE},
+    SupplierStatus.RESPONDED: {SupplierStatus.INACTIVE},
+    SupplierStatus.INACTIVE: set(),
 }
 
 
@@ -188,6 +192,11 @@ class SupplierSource:
     source_url: str
     source_title: str | None = None
     excerpt: str | None = None
+    discovery_run_id: UUID | None = None
+    product_id: UUID | None = None
+    query: str | None = None
+    source_name: str | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
     id: UUID = field(default_factory=uuid4)
     discovered_at: datetime = field(default_factory=_now)
 
@@ -197,11 +206,19 @@ class SupplierSource:
         source_url = _clean(self.source_url, limit=2000)
         if not provider or not source_type or not source_url:
             raise ValidationError("Supplier source provider, type and URL are required.")
+        parsed = urlparse(source_url)
+        if not source_url.startswith("manual://") and (
+            parsed.scheme not in {"http", "https"} or not parsed.netloc
+        ):
+            raise ValidationError("Automatically discovered supplier sources must use HTTP(S).")
         object.__setattr__(self, "provider_name", provider)
         object.__setattr__(self, "source_type", source_type)
         object.__setattr__(self, "source_url", source_url)
         object.__setattr__(self, "source_title", _clean(self.source_title, limit=500))
         object.__setattr__(self, "excerpt", _clean(self.excerpt, limit=4000))
+        object.__setattr__(self, "query", _clean(self.query, limit=2000))
+        object.__setattr__(self, "source_name", _clean(self.source_name, limit=500))
+        object.__setattr__(self, "metadata", dict(self.metadata))
 
 
 @dataclass(slots=True)
@@ -384,6 +401,9 @@ class ProductSupplierMatch:
     components: dict[str, float]
     reasons: tuple[str, ...]
     algorithm_version: str
+    match_status: SupplierMatchStatus = SupplierMatchStatus.CANDIDATE
+    source_url: str | None = None
+    reason: str | None = None
     id: UUID = field(default_factory=uuid4)
     created_at: datetime = field(default_factory=_now)
 
@@ -392,6 +412,8 @@ class ProductSupplierMatch:
             raise ValidationError("Supplier matching algorithm version is required.")
         if not self.reasons:
             raise ValidationError("Supplier matching reasons are required.")
+        object.__setattr__(self, "source_url", _clean(self.source_url, limit=2000))
+        object.__setattr__(self, "reason", _clean(self.reason, limit=4000) or self.reasons[0])
 
 
 @dataclass(slots=True)
