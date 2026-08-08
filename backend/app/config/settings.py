@@ -10,7 +10,7 @@ Environment = Literal["local", "test", "staging", "production"]
 
 class Settings(BaseSettings):
     project_name: str = Field(default="SmartQuote AI")
-    version: str = Field(default="0.7.0")
+    version: str = Field(default="0.6.0")
     environment: Environment = Field(default="local")
     api_v1_prefix: str = Field(default="/api/v1")
     database_url: SecretStr

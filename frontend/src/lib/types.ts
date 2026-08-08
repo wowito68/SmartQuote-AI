@@ -104,6 +104,30 @@ export type SupplierContact = {
   role: string | null;
 };
 
+export type SupplierSource = {
+  id: UUID;
+  provider_name: string;
+  source_type: string;
+  source_url: string;
+  source_title: string | null;
+  excerpt: string | null;
+  discovery_run_id?: UUID | null;
+  product_id?: UUID | null;
+  query?: string | null;
+  source_name?: string | null;
+  metadata?: Record<string, unknown>;
+  discovered_at: string;
+};
+
+export type SupplierMatch = {
+  product_id: UUID;
+  score: number;
+  reasons: string[];
+  match_status?: string;
+  source_url?: string | null;
+  reason?: string | null;
+};
+
 export type TenderSupplier = {
   id: UUID;
   tender_id: UUID;
@@ -113,13 +137,15 @@ export type TenderSupplier = {
   legal_name: string | null;
   trade_name: string | null;
   website: string | null;
+  normalized_domain?: string | null;
   category: string | null;
   country: string | null;
   city: string | null;
   description: string | null;
   rejection_reason: string | null;
   contacts: SupplierContact[];
-  matches: Array<{ product_id: UUID; score: number; reasons: string[] }>;
+  sources: SupplierSource[];
+  matches: SupplierMatch[];
   created_at: string;
   updated_at: string;
 };
@@ -188,4 +214,3 @@ export type TenderRfqs = {
   rfqs: Rfq[];
   metrics: RfqMetrics;
 };
-
