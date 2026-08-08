@@ -17,7 +17,12 @@ class QuoteRepository(ABC):
     def get_quote(self, quote_id: UUID, *, for_update: bool = False) -> Quote | None: ...
 
     @abstractmethod
-    def find_duplicate(self, tender_id: UUID, supplier_id: UUID, file_hash: str) -> Quote | None: ...
+    def find_duplicate(
+        self,
+        tender_id: UUID,
+        supplier_id: UUID,
+        file_hash: str,
+    ) -> Quote | None: ...
 
     @abstractmethod
     def list_quotes(self, tender_id: UUID) -> list[Quote]: ...
@@ -38,7 +43,11 @@ class QuoteRepository(ABC):
     def get_run_by_key(self, quote_id: UUID, key: str) -> QuoteExtractionRun | None: ...
 
     @abstractmethod
-    def replace_items(self, quote_id: UUID, items: tuple[QuoteItem, ...]) -> tuple[QuoteItem, ...]: ...
+    def replace_items(
+        self,
+        quote_id: UUID,
+        items: tuple[QuoteItem, ...],
+    ) -> tuple[QuoteItem, ...]: ...
 
     @abstractmethod
     def list_items(self, quote_id: UUID) -> list[QuoteItem]: ...
