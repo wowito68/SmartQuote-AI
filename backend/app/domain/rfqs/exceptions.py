@@ -1,4 +1,7 @@
-class RfqError(Exception):
+from app.domain.shared.exceptions import DomainError
+
+
+class RfqError(DomainError):
     """Base RFQ application/domain error."""
 
 
@@ -11,6 +14,10 @@ class InvalidRfqState(RfqError):
 
 
 class RfqGenerationError(RfqError):
+    pass
+
+
+class DuplicateRfqRequest(RfqGenerationError):
     pass
 
 
