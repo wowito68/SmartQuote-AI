@@ -23,6 +23,8 @@ from app.infrastructure.db.models.rfq import (
     EmailMessageModel,
     OutboundMessageLogModel,
     RfqRequestModel,
+    RfqTaskRecordModel,
+    RfqVersionModel,
 )
 from app.infrastructure.db.models.supplier import (
     ProductSupplierMatchModel,
@@ -56,6 +58,8 @@ __all__ = [
     "QuoteItemModel",
     "QuoteModel",
     "RfqRequestModel",
+    "RfqTaskRecordModel",
+    "RfqVersionModel",
     "SupplierContactModel",
     "SupplierDiscoveryRunModel",
     "SupplierMergeSuggestionModel",
