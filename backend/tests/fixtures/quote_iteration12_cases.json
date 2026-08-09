@@ -1,0 +1,44 @@
+{
+  "incomplete_quote": {
+    "summary": {
+      "currency": null,
+      "total": null,
+      "delivery_days": null
+    },
+    "expected": [
+      "missing values remain null",
+      "human review required"
+    ]
+  },
+  "multiple_currencies": {
+    "items": [
+      {"product": "Sensor industrial", "total_price": 1000, "currency": "MXN"},
+      {"product": "Sensor industrial", "total_price": 50, "currency": "USD"}
+    ],
+    "expected": "no implicit currency conversion"
+  },
+  "price_mismatch": {
+    "quantity": 2,
+    "unit_price": 100,
+    "total_price": 250,
+    "currency": "MXN",
+    "expected_warning": "PRICE_CALCULATION_MISMATCH"
+  },
+  "unsolicited_product": {
+    "requested": "Sensor de temperatura industrial",
+    "quoted": "Bomba centrifuga",
+    "expected_match": "unmatched"
+  },
+  "incompatible_specification": {
+    "requested": {"proteccion": "IP67"},
+    "quoted": {"proteccion": "IP65"},
+    "expected_compliance": "non_compliant"
+  },
+  "missing_price": {
+    "quantity": 10,
+    "unit_price": null,
+    "total_price": null,
+    "expected_warning": "PRICE_NOT_FOUND",
+    "must_not_become_zero": true
+  }
+}

@@ -52,7 +52,7 @@ def test_quote_rejection_requires_pending_review_and_reason() -> None:
     assert item.rejection_reason == "Does not meet technical requirements"
 
 
-def test_quote_item_calculates_total_and_preserves_evidence() -> None:
+def test_quote_item_preserves_missing_total_and_evidence() -> None:
     item = QuoteItem(
         quote_id=uuid4(),
         product_name="Cable THW 12 AWG",
@@ -66,7 +66,8 @@ def test_quote_item_calculates_total_and_preserves_evidence() -> None:
         evidence_fragment="Cable THW 12 AWG 10 125.50",
         confidence=0.93,
     )
-    assert item.total_price == Decimal("1255.00")
+
+    assert item.total_price is None
     assert item.currency == "MXN"
     assert item.source_page == 2
 

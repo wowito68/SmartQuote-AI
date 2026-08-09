@@ -17,6 +17,7 @@ class RfqStatus(StrEnum):
     DELIVERED = "delivered"
     RESPONDED = "responded"
     FAILED = "failed"
+    RETRY_PENDING = "retry_pending"
     CANCELLED = "cancelled"
 
 
@@ -25,6 +26,15 @@ class EmailMessageStatus(StrEnum):
     SENDING = "sending"
     SENT = "sent"
     FAILED = "failed"
+    BOUNCED = "bounced"
+
+
+class TaskRecordStatus(StrEnum):
+    QUEUED = "queued"
+    RUNNING = "running"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+    RETRY_PENDING = "retry_pending"
 
 
 class OutboundLogResult(StrEnum):

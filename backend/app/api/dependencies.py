@@ -15,6 +15,7 @@ from app.application.ports.unit_of_work import UnitOfWorkFactory
 from app.config.settings import get_settings
 from app.infrastructure.db.unit_of_work import SqlAlchemyUnitOfWork
 from app.infrastructure.email.jinja_template_renderer import JinjaTemplateRenderer
+from app.infrastructure.email.simulated_email_sender import SimulatedEmailSender
 from app.infrastructure.email.smtp_email_sender import SMTPEmailSender
 from app.infrastructure.email.stored_document_attachment_provider import (
     StoredDocumentAttachmentProvider,
@@ -30,9 +31,7 @@ from app.infrastructure.tasks.ai_extraction_queue import CeleryAIExtractionQueue
 from app.infrastructure.tasks.processing_queue import CeleryDocumentProcessingQueue
 from app.infrastructure.tasks.quote_analysis_queue import CeleryQuoteAnalysisQueue
 from app.infrastructure.tasks.rfq_delivery_queue import CeleryRfqDeliveryQueue
-from app.infrastructure.tasks.supplier_discovery_queue import (
-    CelerySupplierDiscoveryQueue,
-)
+from app.infrastructure.tasks.supplier_discovery_queue import CelerySupplierDiscoveryQueue
 
 
 def get_uow_factory() -> UnitOfWorkFactory:
@@ -85,9 +84,10 @@ def get_attachment_provider() -> AttachmentProvider:
     )
 
 
-@lru_cache
-def get_email_sender() -> EmailSender:
+def build_email_sender() -> EmailSender:
     settings = get_settings()
+    if settings.email_mode == "simulation":
+        return SimulatedEmailSender(settings.smtp_sender_email)
     return SMTPEmailSender(
         host=settings.smtp_host,
         port=settings.smtp_port,
@@ -102,6 +102,11 @@ def get_email_sender() -> EmailSender:
         timeout_seconds=settings.smtp_timeout_seconds,
         message_id_domain=settings.smtp_message_id_domain,
     )
+
+
+@lru_cache
+def get_email_sender() -> EmailSender:
+    return build_email_sender()
 
 
 @lru_cache

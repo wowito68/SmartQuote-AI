@@ -2,9 +2,12 @@ import { useEffect, useMemo, useState } from "react";
 
 import { Layout, type ViewKey } from "./components/Layout";
 import { Toast } from "./components/ui";
-import { Dashboard } from "./features/dashboard/Dashboard";
 import { CatalogPanel } from "./features/catalog/CatalogPanel";
+import { Dashboard } from "./features/dashboard/Dashboard";
 import { DocumentsPanel } from "./features/documents/DocumentsPanel";
+import { QuotesPanel } from "./features/quotes/QuotesPanel";
+import { quoteApi } from "./features/quotes/api";
+import type { Quote } from "./features/quotes/types";
 import { RfqsPanel } from "./features/rfqs/RfqsPanel";
 import { SuppliersPanel, type ManualSupplierForm } from "./features/suppliers/SuppliersPanel";
 import { TenderWorkspace } from "./features/tenders/TenderWorkspace";
@@ -19,7 +22,7 @@ import type {
 } from "./lib/types";
 
 const DEFAULT_USER_ID = "00000000-0000-0000-0000-000000000001";
-const views = ["dashboard", "tenders", "documents", "catalog", "suppliers", "rfqs"] as const;
+const views = ["dashboard", "tenders", "documents", "catalog", "suppliers", "rfqs", "quotes"] as const;
 
 function getInitialView(): ViewKey {
   const hash = window.location.hash.replace("#", "");
@@ -43,11 +46,13 @@ export function App() {
   const [catalog, setCatalog] = useState<TenderCatalog | null>(null);
   const [suppliers, setSuppliers] = useState<TenderSuppliers | null>(null);
   const [rfqs, setRfqs] = useState<TenderRfqs | null>(null);
+  const [quotes, setQuotes] = useState<Quote[]>([]);
   const [loadingTenders, setLoadingTenders] = useState(false);
   const [loadingDocuments, setLoadingDocuments] = useState(false);
   const [loadingCatalog, setLoadingCatalog] = useState(false);
   const [loadingSuppliers, setLoadingSuppliers] = useState(false);
   const [loadingRfqs, setLoadingRfqs] = useState(false);
+  const [loadingQuotes, setLoadingQuotes] = useState(false);
   const [toast, setToast] = useState<{ message: string; tone: "info" | "error" } | null>(null);
 
   const selectedTender = useMemo(
@@ -69,21 +74,22 @@ export function App() {
     return () => window.removeEventListener("hashchange", onHashChange);
   }, []);
 
-  function setActiveView(view: ViewKey) {
-    setActiveViewState(view);
-    window.history.replaceState(null, "", `#${view}`);
-  }
-
   useEffect(() => {
     if (!selectedTenderId) {
       setDocuments([]);
       setCatalog(null);
       setSuppliers(null);
       setRfqs(null);
+      setQuotes([]);
       return;
     }
     void refreshTenderWorkspace(selectedTenderId);
   }, [selectedTenderId]);
+
+  function setActiveView(view: ViewKey) {
+    setActiveViewState(view);
+    window.history.replaceState(null, "", `#${view}`);
+  }
 
   async function bootstrap() {
     await Promise.all([loadHealth(), loadTenders()]);
@@ -116,7 +122,8 @@ export function App() {
       loadDocuments(tenderId),
       loadCatalog(tenderId),
       loadSuppliers(tenderId),
-      loadRfqs(tenderId)
+      loadRfqs(tenderId),
+      loadQuotes(tenderId)
     ]);
   }
 
@@ -124,8 +131,7 @@ export function App() {
     if (!tenderId) return;
     setLoadingDocuments(true);
     try {
-      const response = await api.listDocuments(tenderId);
-      setDocuments(response.items);
+      setDocuments((await api.listDocuments(tenderId)).items);
     } catch (error) {
       handleOptionalResource(error, () => setDocuments([]));
     } finally {
@@ -169,6 +175,18 @@ export function App() {
     }
   }
 
+  async function loadQuotes(tenderId = selectedTenderId) {
+    if (!tenderId) return;
+    setLoadingQuotes(true);
+    try {
+      setQuotes((await quoteApi.list(tenderId)).items);
+    } catch (error) {
+      handleOptionalResource(error, () => setQuotes([]));
+    } finally {
+      setLoadingQuotes(false);
+    }
+  }
+
   async function createTender(payload: {
     title: string;
     description: string | null;
@@ -199,8 +217,7 @@ export function App() {
   async function uploadDocuments(files: FileList) {
     if (!selectedTenderId) return;
     try {
-      const response = await api.uploadDocuments(selectedTenderId, userId, files);
-      setDocuments(response.items);
+      setDocuments((await api.uploadDocuments(selectedTenderId, userId, files)).items);
       setToast({ message: "Documentos cargados y encolados.", tone: "info" });
     } catch (error) {
       reportError(error);
@@ -301,7 +318,6 @@ export function App() {
       contact_name: string | null;
       role: string | null;
     }>;
-
     try {
       await api.createManualSupplier({
         tender_id: selectedTenderId,
@@ -392,6 +408,20 @@ export function App() {
     setToast({ message, tone: "error" });
   }
 
+  const rfqsPanel = (
+    <RfqsPanel
+      tenderId={selectedTender?.id ?? null}
+      userId={userId}
+      documents={documents}
+      rfqs={rfqs}
+      loading={loadingRfqs}
+      onRefresh={() => loadRfqs()}
+      onGenerate={generateRfqs}
+      onApprove={approveRfq}
+      onSend={sendRfq}
+    />
+  );
+
   const content =
     activeView === "dashboard" ? (
       <Dashboard tenders={tenders} health={health} catalog={catalog} suppliers={suppliers} rfqs={rfqs} />
@@ -441,19 +471,7 @@ export function App() {
             onReject={rejectSupplier}
           />
         }
-        rfqsPanel={
-          <RfqsPanel
-            tenderId={selectedTender?.id ?? null}
-            userId={userId}
-            documents={documents}
-            rfqs={rfqs}
-            loading={loadingRfqs}
-            onRefresh={() => loadRfqs()}
-            onGenerate={generateRfqs}
-            onApprove={approveRfq}
-            onSend={sendRfq}
-          />
-        }
+        rfqsPanel={rfqsPanel}
         onSelectTender={setSelectedTenderId}
         onCreateTender={createTender}
         onArchiveTender={archiveTender}
@@ -493,16 +511,18 @@ export function App() {
         onReject={rejectSupplier}
       />
     ) : activeView === "rfqs" ? (
-      <RfqsPanel
+      rfqsPanel
+    ) : activeView === "quotes" ? (
+      <QuotesPanel
         tenderId={selectedTender?.id ?? null}
         userId={userId}
-        documents={documents}
+        suppliers={suppliers}
         rfqs={rfqs}
-        loading={loadingRfqs}
-        onRefresh={() => loadRfqs()}
-        onGenerate={generateRfqs}
-        onApprove={approveRfq}
-        onSend={sendRfq}
+        catalogProducts={catalog?.products ?? []}
+        quotes={quotes}
+        loading={loadingQuotes}
+        onRefresh={() => loadQuotes()}
+        onError={reportError}
       />
     ) : null;
 

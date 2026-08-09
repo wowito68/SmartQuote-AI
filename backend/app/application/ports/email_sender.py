@@ -10,6 +10,9 @@ class EmailSendResult:
     provider_name: str
     external_message_id: str
     duration_ms: int
+    success: bool = True
+    error: str | None = None
+    retryable: bool = False
 
 
 class EmailSender(ABC):

@@ -9,6 +9,8 @@ from app.domain.rfqs.entities import (
     EmailMessage,
     OutboundMessageLog,
     RfqRequest,
+    RfqTaskRecord,
+    RfqVersionSnapshot,
 )
 from app.infrastructure.db.mappers.rfq_mapper import (
     attachment_to_domain,
@@ -19,14 +21,21 @@ from app.infrastructure.db.mappers.rfq_mapper import (
     message_to_model,
     rfq_to_domain,
     rfq_to_model,
+    task_to_domain,
+    task_to_model,
     update_message_model,
     update_rfq_model,
+    update_task_model,
+    version_to_domain,
+    version_to_model,
 )
 from app.infrastructure.db.models.rfq import (
     EmailAttachmentModel,
     EmailMessageModel,
     OutboundMessageLogModel,
     RfqRequestModel,
+    RfqTaskRecordModel,
+    RfqVersionModel,
 )
 
 
@@ -71,6 +80,20 @@ class SqlAlchemyRfqRepository(RfqRepository):
         )
         return [rfq_to_domain(model) for model in self._session.scalars(statement)]
 
+    def create_version(self, version: RfqVersionSnapshot) -> RfqVersionSnapshot:
+        model = version_to_model(version)
+        self._session.add(model)
+        self._session.flush()
+        return version_to_domain(model)
+
+    def list_versions(self, rfq_id: UUID) -> list[RfqVersionSnapshot]:
+        statement = (
+            select(RfqVersionModel)
+            .where(RfqVersionModel.rfq_id == rfq_id)
+            .order_by(RfqVersionModel.version)
+        )
+        return [version_to_domain(model) for model in self._session.scalars(statement)]
+
     def replace_attachments(
         self, rfq_id: UUID, attachments: tuple[EmailAttachment, ...]
     ) -> tuple[EmailAttachment, ...]:
@@ -91,6 +114,31 @@ class SqlAlchemyRfqRepository(RfqRepository):
         return [attachment_to_domain(model) for model in self._session.scalars(statement)]
 
     def create_message(self, message: EmailMessage) -> EmailMessage:
+        existing = self._session.scalars(
+            select(EmailMessageModel).where(
+                EmailMessageModel.idempotency_key == message.idempotency_key
+            )
+        ).first()
+        if existing is not None:
+            if existing.status != "sent":
+                existing.status = message.status.value
+                existing.provider_name = message.provider_name
+                existing.from_address = message.from_address
+                existing.to_recipients = list(message.to_recipients)
+                existing.cc_recipients = list(message.cc_recipients)
+                existing.bcc_recipients = list(message.bcc_recipients)
+                existing.subject = message.subject
+                existing.body = message.body
+                existing.attachment_snapshot = list(message.attachment_snapshot)
+                existing.external_message_id = None
+                existing.error_type = None
+                existing.error_message = None
+                existing.started_at = message.started_at
+                existing.sent_at = None
+                existing.failed_at = None
+                existing.duration_ms = None
+                self._session.flush()
+            return message_to_domain(existing)
         model = message_to_model(message)
         self._session.add(model)
         self._session.flush()
@@ -111,6 +159,12 @@ class SqlAlchemyRfqRepository(RfqRepository):
         if for_update:
             statement = statement.with_for_update()
         model = self._session.scalars(statement).first()
+        return message_to_domain(model) if model else None
+
+    def get_message_by_idempotency(self, key: str) -> EmailMessage | None:
+        model = self._session.scalars(
+            select(EmailMessageModel).where(EmailMessageModel.idempotency_key == key)
+        ).first()
         return message_to_domain(model) if model else None
 
     def list_messages(self, rfq_id: UUID) -> list[EmailMessage]:
@@ -137,6 +191,43 @@ class SqlAlchemyRfqRepository(RfqRepository):
             )
         )
         return int(maximum or 0) + 1
+
+    def create_task(self, task: RfqTaskRecord) -> RfqTaskRecord:
+        model = task_to_model(task)
+        self._session.add(model)
+        self._session.flush()
+        return task_to_domain(model)
+
+    def update_task(self, task: RfqTaskRecord) -> RfqTaskRecord:
+        model = self._session.get(RfqTaskRecordModel, task.id)
+        if model is None:
+            raise ValueError("RFQ task record does not exist.")
+        update_task_model(model, task)
+        self._session.flush()
+        return task_to_domain(model)
+
+    def get_task(self, task_id: UUID, *, for_update: bool = False) -> RfqTaskRecord | None:
+        statement = select(RfqTaskRecordModel).where(RfqTaskRecordModel.id == task_id)
+        if for_update:
+            statement = statement.with_for_update()
+        model = self._session.scalars(statement).first()
+        return task_to_domain(model) if model else None
+
+    def get_task_by_correlation(self, correlation_id: str) -> RfqTaskRecord | None:
+        model = self._session.scalars(
+            select(RfqTaskRecordModel).where(
+                RfqTaskRecordModel.correlation_id == correlation_id
+            )
+        ).first()
+        return task_to_domain(model) if model else None
+
+    def list_tasks(self, rfq_id: UUID) -> list[RfqTaskRecord]:
+        statement = (
+            select(RfqTaskRecordModel)
+            .where(RfqTaskRecordModel.rfq_id == rfq_id)
+            .order_by(RfqTaskRecordModel.queued_at, RfqTaskRecordModel.id)
+        )
+        return [task_to_domain(model) for model in self._session.scalars(statement)]
 
     def add_log(self, log: OutboundMessageLog) -> OutboundMessageLog:
         model = log_to_model(log)

@@ -3,13 +3,22 @@ from app.domain.rfqs.entities import (
     EmailMessage,
     OutboundMessageLog,
     RfqRequest,
+    RfqTaskRecord,
+    RfqVersionSnapshot,
 )
-from app.domain.rfqs.value_objects import EmailMessageStatus, OutboundLogResult, RfqStatus
+from app.domain.rfqs.value_objects import (
+    EmailMessageStatus,
+    OutboundLogResult,
+    RfqStatus,
+    TaskRecordStatus,
+)
 from app.infrastructure.db.models.rfq import (
     EmailAttachmentModel,
     EmailMessageModel,
     OutboundMessageLogModel,
     RfqRequestModel,
+    RfqTaskRecordModel,
+    RfqVersionModel,
 )
 
 
@@ -19,6 +28,7 @@ def rfq_to_model(rfq: RfqRequest) -> RfqRequestModel:
         tender_id=rfq.tender_id,
         tender_supplier_id=rfq.tender_supplier_id,
         supplier_id=rfq.supplier_id,
+        contact_id=rfq.contact_id,
         catalog_snapshot_id=rfq.catalog_snapshot_id,
         generated_by_user_id=rfq.generated_by_user_id,
         response_deadline=rfq.response_deadline,
@@ -59,6 +69,7 @@ def rfq_to_domain(model: RfqRequestModel) -> RfqRequest:
         tender_id=model.tender_id,
         tender_supplier_id=model.tender_supplier_id,
         supplier_id=model.supplier_id,
+        contact_id=model.contact_id,
         catalog_snapshot_id=model.catalog_snapshot_id,
         generated_by_user_id=model.generated_by_user_id,
         response_deadline=model.response_deadline,
@@ -94,6 +105,7 @@ def rfq_to_domain(model: RfqRequestModel) -> RfqRequest:
 
 
 def update_rfq_model(model: RfqRequestModel, rfq: RfqRequest) -> None:
+    model.contact_id = rfq.contact_id
     model.response_deadline = rfq.response_deadline
     model.subject = rfq.subject
     model.body = rfq.body
@@ -118,6 +130,46 @@ def update_rfq_model(model: RfqRequestModel, rfq: RfqRequest) -> None:
     model.last_error = rfq.last_error
     model.send_idempotency_key = rfq.send_idempotency_key
     model.updated_at = rfq.updated_at
+
+
+def version_to_model(item: RfqVersionSnapshot) -> RfqVersionModel:
+    return RfqVersionModel(
+        id=item.id,
+        rfq_id=item.rfq_id,
+        version=item.version,
+        changed_by_user_id=item.changed_by_user_id,
+        status=item.status.value,
+        contact_id=item.contact_id,
+        subject=item.subject,
+        body=item.body,
+        to_recipients=list(item.to_recipients),
+        cc_recipients=list(item.cc_recipients),
+        bcc_recipients=list(item.bcc_recipients),
+        products=list(item.products),
+        attachment_snapshot=list(item.attachment_snapshot),
+        change_reason=item.change_reason,
+        created_at=item.created_at,
+    )
+
+
+def version_to_domain(model: RfqVersionModel) -> RfqVersionSnapshot:
+    return RfqVersionSnapshot(
+        id=model.id,
+        rfq_id=model.rfq_id,
+        version=model.version,
+        changed_by_user_id=model.changed_by_user_id,
+        status=RfqStatus(model.status),
+        contact_id=model.contact_id,
+        subject=model.subject,
+        body=model.body,
+        to_recipients=tuple(model.to_recipients or []),
+        cc_recipients=tuple(model.cc_recipients or []),
+        bcc_recipients=tuple(model.bcc_recipients or []),
+        products=tuple(model.products or []),
+        attachment_snapshot=tuple(model.attachment_snapshot or []),
+        change_reason=model.change_reason,
+        created_at=model.created_at,
+    )
 
 
 def attachment_to_model(item: EmailAttachment) -> EmailAttachmentModel:
@@ -167,6 +219,7 @@ def message_to_model(item: EmailMessage) -> EmailMessageModel:
         error_message=item.error_message,
         started_at=item.started_at,
         sent_at=item.sent_at,
+        failed_at=item.failed_at,
         duration_ms=item.duration_ms,
         created_at=item.created_at,
     )
@@ -193,6 +246,7 @@ def message_to_domain(model: EmailMessageModel) -> EmailMessage:
         error_message=model.error_message,
         started_at=model.started_at,
         sent_at=model.sent_at,
+        failed_at=model.failed_at,
         duration_ms=model.duration_ms,
         created_at=model.created_at,
     )
@@ -205,7 +259,49 @@ def update_message_model(model: EmailMessageModel, item: EmailMessage) -> None:
     model.error_message = item.error_message
     model.started_at = item.started_at
     model.sent_at = item.sent_at
+    model.failed_at = item.failed_at
     model.duration_ms = item.duration_ms
+
+
+def task_to_model(item: RfqTaskRecord) -> RfqTaskRecordModel:
+    return RfqTaskRecordModel(
+        id=item.id,
+        rfq_id=item.rfq_id,
+        correlation_id=item.correlation_id,
+        task_name=item.task_name,
+        status=item.status.value,
+        attempt_count=item.attempt_count,
+        last_error=item.last_error,
+        queued_at=item.queued_at,
+        started_at=item.started_at,
+        completed_at=item.completed_at,
+        updated_at=item.updated_at,
+    )
+
+
+def task_to_domain(model: RfqTaskRecordModel) -> RfqTaskRecord:
+    return RfqTaskRecord(
+        id=model.id,
+        rfq_id=model.rfq_id,
+        correlation_id=model.correlation_id,
+        task_name=model.task_name,
+        status=TaskRecordStatus(model.status),
+        attempt_count=model.attempt_count,
+        last_error=model.last_error,
+        queued_at=model.queued_at,
+        started_at=model.started_at,
+        completed_at=model.completed_at,
+        updated_at=model.updated_at,
+    )
+
+
+def update_task_model(model: RfqTaskRecordModel, item: RfqTaskRecord) -> None:
+    model.status = item.status.value
+    model.attempt_count = item.attempt_count
+    model.last_error = item.last_error
+    model.started_at = item.started_at
+    model.completed_at = item.completed_at
+    model.updated_at = item.updated_at
 
 
 def log_to_model(item: OutboundMessageLog) -> OutboundMessageLogModel:

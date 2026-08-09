@@ -78,6 +78,7 @@ class RfqResponse:
     attachments: tuple[RfqAttachmentResponse, ...]
     created_at: datetime
     updated_at: datetime
+    contact_id: UUID | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -142,6 +143,7 @@ class EmailMessageResponse:
     sent_at: datetime | None
     duration_ms: int | None
     created_at: datetime
+    failed_at: datetime | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -149,6 +151,7 @@ class RfqMessagesResponse:
     rfq_id: UUID
     messages: tuple[EmailMessageResponse, ...]
     logs: tuple[OutboundLogResponse, ...]
+
 
 @dataclass(frozen=True, slots=True)
 class CompanyProfile:

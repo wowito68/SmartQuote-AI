@@ -9,6 +9,14 @@ class QuoteNotFound(QuoteError):
     pass
 
 
+class QuoteDocumentNotFound(QuoteError):
+    pass
+
+
+class QuoteItemNotFound(QuoteError):
+    pass
+
+
 class DuplicateQuote(QuoteError):
     pass
 
@@ -21,11 +29,15 @@ class QuoteExtractionFailure(QuoteError):
     pass
 
 
-class QuoteProviderError(QuoteExtractionFailure):
+class RetryableQuoteExtractionFailure(QuoteExtractionFailure):
     pass
 
 
-class QuoteStorageError(QuoteError):
+class QuoteProviderError(RetryableQuoteExtractionFailure):
+    pass
+
+
+class QuoteStorageError(RetryableQuoteExtractionFailure):
     pass
 
 

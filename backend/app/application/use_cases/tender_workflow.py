@@ -1,27 +1,27 @@
 from uuid import UUID
 
-from app.application.dtos.quotes import QuoteResponse, UploadQuoteCommand
+from app.application.dtos.quotes import (
+    QuoteResponse,
+    QuoteUploadResponse,
+    UploadQuoteCommand,
+    UploadQuoteDocumentCommand,
+)
 from app.application.exceptions import TenderNotFound
 from app.application.ports.file_storage import FileStorage
 from app.application.ports.quote_analysis_queue import QuoteAnalysisQueue
 from app.application.ports.unit_of_work import UnitOfWorkFactory
-from app.application.use_cases.quotes import UploadSupplierQuote
+from app.application.use_cases.quotes import UploadQuoteDocument, UploadSupplierQuote
 from app.domain.documents.value_objects import DocumentStatus
 from app.domain.quotes.events import quote_event
 from app.domain.quotes.exceptions import InvalidQuoteState
 from app.domain.rfqs.value_objects import RfqStatus
+from app.domain.suppliers.exceptions import SupplierNotFound
 from app.domain.suppliers.value_objects import SupplierStatus
 from app.domain.tenders.value_objects import TenderStatus
 
 
 class SynchronizeTenderForQuoteAnalysis:
-    """Repair legacy tender-state drift using already-verified MVP artifacts.
-
-    Iterations 1-8 persisted document, catalog, supplier and RFQ artifacts without
-    advancing every global TenderStatus milestone. This compatibility bridge keeps
-    the strict domain graph and replays only sequential transitions supported by
-    persisted evidence. It stops at waiting_quotes before the quote is accepted.
-    """
+    """Repair legacy tender-state drift using already-verified MVP artifacts."""
 
     def __init__(self, uow_factory: UnitOfWorkFactory) -> None:
         self._uow_factory = uow_factory
@@ -49,9 +49,7 @@ class SynchronizeTenderForQuoteAnalysis:
                     "Tender documents must be fully processed before supplier quotes."
                 )
             if uow.catalogs.get_latest_snapshot(tender_id) is None:
-                raise InvalidQuoteState(
-                    "Tender requires an approved catalog before supplier quotes."
-                )
+                raise InvalidQuoteState("Tender requires an approved catalog before supplier quotes.")
 
             tender_supplier = uow.suppliers.get_tender_supplier(tender_supplier_id)
             if tender_supplier is None or tender_supplier.tender_id != tender_id:
@@ -97,7 +95,7 @@ class SynchronizeTenderForQuoteAnalysis:
                         aggregate_type="tender",
                         previous_status=previous_status.value,
                         current_status=tender.status.value,
-                        reason="verified_iteration_9_artifacts",
+                        reason="verified_persisted_artifacts",
                     )
                 )
                 uow.commit()
@@ -105,7 +103,7 @@ class SynchronizeTenderForQuoteAnalysis:
 
 
 class UploadSupplierQuoteWorkflow:
-    """Application orchestration for quote upload plus global tender progression."""
+    """Compatibility orchestration for Iteration 9's tender-supplier route."""
 
     def __init__(
         self,
@@ -125,4 +123,37 @@ class UploadSupplierQuoteWorkflow:
 
     def execute(self, command: UploadQuoteCommand) -> QuoteResponse:
         self._synchronize.execute(command.tender_id, command.tender_supplier_id)
+        return self._upload.execute(command)
+
+
+class UploadQuoteDocumentWorkflow:
+    """Resolve supplier identity, synchronize legacy tender state and perform manual intake."""
+
+    def __init__(
+        self,
+        uow_factory: UnitOfWorkFactory,
+        file_storage: FileStorage,
+        queue: QuoteAnalysisQueue,
+        *,
+        maximum_size_bytes: int,
+    ) -> None:
+        self._uow_factory = uow_factory
+        self._synchronize = SynchronizeTenderForQuoteAnalysis(uow_factory)
+        self._upload = UploadQuoteDocument(
+            uow_factory,
+            file_storage,
+            queue,
+            maximum_size_bytes=maximum_size_bytes,
+        )
+
+    def execute(self, command: UploadQuoteDocumentCommand) -> QuoteUploadResponse:
+        with self._uow_factory() as uow:
+            tender_supplier = uow.suppliers.find_tender_supplier(
+                command.tender_id,
+                command.supplier_id,
+            )
+            if tender_supplier is None:
+                raise SupplierNotFound("Supplier is not associated with this tender.")
+            tender_supplier_id = tender_supplier.id
+        self._synchronize.execute(command.tender_id, tender_supplier_id)
         return self._upload.execute(command)

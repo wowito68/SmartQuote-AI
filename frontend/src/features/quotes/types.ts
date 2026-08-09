@@ -1,0 +1,120 @@
+import type { UUID } from "../../lib/types";
+
+export type QuoteEvidence = {
+  id: UUID;
+  quote_document_id: UUID;
+  extraction_run_id: UUID;
+  entity_type: string;
+  entity_id: UUID;
+  field_name: string;
+  locator_type: string;
+  locator: string;
+  fragment: string;
+  extraction_method: string;
+  finding_status: string;
+  confidence: number;
+  created_at: string;
+};
+
+export type QuoteDocument = {
+  id: UUID;
+  quote_id: UUID;
+  original_file_name: string;
+  mime_type: string;
+  file_size: number;
+  file_hash: string;
+  document_type: "pdf" | "xlsx" | "docx";
+  processing_status: string;
+  extractor_name: string | null;
+  extractor_version: string | null;
+  last_error: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type QuoteExtractionRun = {
+  id: UUID;
+  quote_document_id: UUID | null;
+  run_number: number;
+  provider: string;
+  model: string;
+  prompt_version: string;
+  schema_version: string;
+  extractor_name: string;
+  extractor_version: string;
+  status: string;
+  input_tokens: number;
+  output_tokens: number;
+  estimated_cost_usd: string | number;
+  duration_ms: number | null;
+  is_approved_source: boolean;
+  error_type: string | null;
+  error_message: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  created_at: string;
+};
+
+export type QuoteItem = {
+  id: UUID;
+  catalog_product_id: UUID | null;
+  extraction_run_id: UUID | null;
+  product_name: string;
+  description: string | null;
+  brand: string | null;
+  model: string | null;
+  quantity: string | number | null;
+  unit: string | null;
+  unit_price: string | number | null;
+  total_price: string | number | null;
+  currency: string | null;
+  delivery_days: number | null;
+  technical_compliance: boolean | null;
+  compliance_status: "compliant" | "non_compliant" | "partial" | "unknown";
+  quoted_specifications: Record<string, string>;
+  match_status: "matched" | "possible_match" | "unmatched";
+  match_score: number;
+  match_reason: string | null;
+  warnings: string[];
+  notes: string | null;
+  source_evidence_id: UUID | null;
+  source_page: number | null;
+  evidence_fragment: string | null;
+  confidence: number;
+  original_extracted: Record<string, unknown>;
+};
+
+export type Quote = {
+  id: UUID;
+  tender_id: UUID;
+  tender_supplier_id: UUID;
+  supplier_id: UUID;
+  rfq_request_id: UUID | null;
+  original_file_name: string;
+  file_hash: string;
+  file_size: number;
+  mime_type: string;
+  status: string;
+  currency: string | null;
+  subtotal_amount: string | number | null;
+  tax_amount: string | number | null;
+  total_amount: string | number | null;
+  delivery_time_days: number | null;
+  commercial_terms: string | null;
+  valid_until: string | null;
+  received_at: string;
+  approved_extraction_run_id: UUID | null;
+  version: number;
+  manual_edit_count: number;
+  reviewed_by_user_id: UUID | null;
+  reviewed_at: string | null;
+  rejection_reason: string | null;
+  last_error: string | null;
+  items: QuoteItem[];
+  documents: QuoteDocument[];
+  extraction_runs: QuoteExtractionRun[];
+  created_at: string;
+  updated_at: string;
+};
+
+export type TenderQuotes = { items: Quote[]; total: number };

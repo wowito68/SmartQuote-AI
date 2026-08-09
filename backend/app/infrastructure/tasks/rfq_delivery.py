@@ -2,10 +2,13 @@ from uuid import UUID
 
 from celery import Task
 
+from app.application.ports.email_sender import EmailSender
+from app.application.use_cases.rfq_workflow import SendRfq
 from app.application.use_cases.rfqs import DeliverRfq
 from app.config.settings import get_settings
-from app.domain.rfqs.exceptions import EmailDeliveryError
+from app.domain.rfqs.exceptions import RetryableEmailDeliveryError
 from app.infrastructure.db.unit_of_work import SqlAlchemyUnitOfWork
+from app.infrastructure.email.simulated_email_sender import SimulatedEmailSender
 from app.infrastructure.email.smtp_email_sender import SMTPEmailSender
 from app.infrastructure.email.stored_document_attachment_provider import (
     StoredDocumentAttachmentProvider,
@@ -23,8 +26,10 @@ def get_attachment_provider() -> StoredDocumentAttachmentProvider:
     )
 
 
-def get_email_sender() -> SMTPEmailSender:
+def get_email_sender() -> EmailSender:
     settings = get_settings()
+    if settings.email_mode == "simulation":
+        return SimulatedEmailSender(settings.smtp_sender_email)
     return SMTPEmailSender(
         host=settings.smtp_host,
         port=settings.smtp_port,
@@ -43,15 +48,33 @@ def get_email_sender() -> SMTPEmailSender:
     bind=True,
     base=Task,
     name="smartquote.rfqs.send",
-    autoretry_for=(EmailDeliveryError,),
+    autoretry_for=(RetryableEmailDeliveryError,),
     retry_backoff=True,
     retry_jitter=True,
-    retry_kwargs={"max_retries": 3},
+    retry_kwargs={"max_retries": get_settings().rfq_delivery_max_retries},
+    rate_limit=get_settings().rfq_delivery_rate_limit,
 )
-def send_rfq_email(self: Task, rfq_id: str) -> str:
-    message_id = DeliverRfq(
+def send_rfq_email(
+    self: Task,
+    rfq_id: str,
+    task_record_id: str | None = None,
+    correlation_id: str | None = None,
+) -> str:
+    del self
+    if task_record_id is None:
+        message_id = DeliverRfq(
+            SqlAlchemyUnitOfWork,
+            get_attachment_provider(),
+            get_email_sender(),
+        ).execute(UUID(rfq_id))
+        return str(message_id)
+    message_id = SendRfq(
         SqlAlchemyUnitOfWork,
         get_attachment_provider(),
         get_email_sender(),
-    ).execute(UUID(rfq_id))
+    ).execute(
+        UUID(rfq_id),
+        UUID(task_record_id),
+        correlation_id,
+    )
     return str(message_id)
