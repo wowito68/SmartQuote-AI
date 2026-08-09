@@ -11,18 +11,20 @@ EmailMode = Literal["simulation", "smtp"]
 
 class Settings(BaseSettings):
     project_name: str = Field(default="SmartQuote AI")
-    version: str = Field(default="0.7.0")
+    version: str = Field(default="0.8.0")
     environment: Environment = Field(default="local")
     api_v1_prefix: str = Field(default="/api/v1")
     database_url: SecretStr
     storage_root: Path = Field(default=Path("storage/private"))
     max_document_size_bytes: int = Field(default=20 * 1024 * 1024, gt=0)
     max_documents_per_upload: int = Field(default=10, gt=0, le=50)
+    max_quote_document_size_bytes: int = Field(default=20 * 1024 * 1024, gt=0)
 
     celery_broker_url: SecretStr = Field(default=SecretStr("redis://redis:6379/0"))
     celery_result_backend: SecretStr = Field(default=SecretStr("redis://redis:6379/1"))
     celery_task_always_eager: bool = Field(default=False)
     pending_document_scan_seconds: int = Field(default=60, ge=10, le=3600)
+    quote_processing_max_retries: int = Field(default=3, ge=0, le=10)
 
     extraction_minimum_characters: int = Field(default=100, ge=0)
     extraction_maximum_empty_page_percentage: float = Field(default=60.0, ge=0, le=100)
@@ -40,15 +42,15 @@ class Settings(BaseSettings):
     openai_timeout_seconds: float = Field(default=90.0, gt=0, le=600)
     ai_model: str = Field(default="gpt-5-mini")
     ai_prompt_version: str = Field(default="1.0.0")
-    quote_ai_prompt_version: str = Field(default="1.0.0")
+    quote_ai_prompt_version: str = Field(default="2.0.0")
+    quote_confidence_high_threshold: float = Field(default=0.90, ge=0, le=1)
+    quote_confidence_medium_threshold: float = Field(default=0.70, ge=0, le=1)
     ai_temperature: float = Field(default=0.0, ge=0, le=2)
     ai_input_cost_per_million_tokens: float = Field(default=0.0, ge=0)
     ai_output_cost_per_million_tokens: float = Field(default=0.0, ge=0)
     comparison_scoring_config_version: str = Field(default="mvp-1")
 
-    supplier_directory_path: Path = Field(
-        default=Path("app/supplier_sources/default_directory.json")
-    )
+    supplier_directory_path: Path = Field(default=Path("app/supplier_sources/default_directory.json"))
     supplier_search_country: str | None = Field(default="MX")
     supplier_search_city: str | None = Field(default=None)
     supplier_search_query_version: str = Field(default="1.0.0")

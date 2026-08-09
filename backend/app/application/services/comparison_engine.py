@@ -21,11 +21,7 @@ class ComparisonEngine:
 
         by_product: dict[str, list[tuple[str, str, QuoteItem]]] = defaultdict(list)
         for supplier_id, supplier_name, item in entries:
-            key = (
-                str(item.catalog_product_id)
-                if item.catalog_product_id
-                else item.product_name.casefold()
-            )
+            key = str(item.catalog_product_id) if item.catalog_product_id else item.product_name.casefold()
             by_product[key].append((supplier_id, supplier_name, item))
 
         rows: list[dict[str, Any]] = []
@@ -34,10 +30,16 @@ class ComparisonEngine:
         warnings: list[str] = []
 
         for product_entries in by_product.values():
+            currencies = {
+                item.currency
+                for _, _, item in product_entries
+                if item.currency and (item.total_price is not None or item.unit_price is not None)
+            }
+            currency_mismatch = len(currencies) > 1
             comparable_prices = [
                 item.total_price
                 for _, _, item in product_entries
-                if item.total_price is not None and item.total_price > 0
+                if not currency_mismatch and item.total_price is not None and item.total_price >= 0
             ]
             comparable_delivery = [
                 item.delivery_days
@@ -49,7 +51,7 @@ class ComparisonEngine:
 
             for supplier_id, supplier_name, item in product_entries:
                 supplier_names[supplier_id] = supplier_name
-                row_warnings: list[str] = []
+                row_warnings: list[str] = list(item.warnings)
                 if item.technical_compliance is True:
                     technical = Decimal("1")
                 elif item.technical_compliance is False:
@@ -58,8 +60,17 @@ class ComparisonEngine:
                     technical = Decimal("0.5")
                     row_warnings.append("Technical compliance is incomplete or unverified.")
 
-                if item.total_price is not None and item.total_price > 0 and minimum_price:
-                    price = min(Decimal("1"), minimum_price / item.total_price)
+                if currency_mismatch:
+                    price = Decimal("0.5")
+                    row_warnings.append(
+                        "Currencies differ across supplier quotes; prices are not directly comparable and no FX conversion was applied."
+                    )
+                elif item.total_price is not None and minimum_price is not None:
+                    price = Decimal("1") if minimum_price == 0 and item.total_price == 0 else (
+                        min(Decimal("1"), minimum_price / item.total_price)
+                        if item.total_price > 0 and minimum_price > 0
+                        else Decimal("0.5")
+                    )
                 else:
                     price = Decimal("0.5")
                     row_warnings.append("Price is incomplete or not comparable.")
@@ -69,10 +80,7 @@ class ComparisonEngine:
                         delivery = Decimal("1")
                     else:
                         baseline = max(minimum_delivery, 1)
-                        delivery = min(
-                            Decimal("1"),
-                            Decimal(baseline) / Decimal(item.delivery_days),
-                        )
+                        delivery = min(Decimal("1"), Decimal(baseline) / Decimal(item.delivery_days))
                 else:
                     delivery = Decimal("0.5")
                     row_warnings.append("Delivery time is incomplete.")
@@ -87,27 +95,26 @@ class ComparisonEngine:
                 warnings.extend(row_warnings)
                 rows.append(
                     {
-                        "catalog_product_id": (
-                            str(item.catalog_product_id) if item.catalog_product_id else None
-                        ),
+                        "catalog_product_id": str(item.catalog_product_id) if item.catalog_product_id else None,
                         "product": item.product_name,
                         "supplier_id": supplier_id,
                         "supplier": supplier_name,
                         "brand": item.brand,
                         "model": item.model,
                         "quantity": str(item.quantity) if item.quantity is not None else None,
-                        "unit_price": (
-                            str(item.unit_price) if item.unit_price is not None else None
-                        ),
-                        "total_price": (
-                            str(item.total_price) if item.total_price is not None else None
-                        ),
+                        "unit": item.unit,
+                        "unit_price": str(item.unit_price) if item.unit_price is not None else None,
+                        "total_price": str(item.total_price) if item.total_price is not None else None,
                         "currency": item.currency,
                         "delivery_days": item.delivery_days,
                         "technical_compliance": item.technical_compliance,
+                        "compliance_status": item.compliance_status.value,
+                        "match_status": item.match_status.value,
+                        "match_score": item.match_score,
                         "notes": item.notes,
                         "source": {
                             "quote_id": str(item.quote_id),
+                            "evidence_id": str(item.source_evidence_id) if item.source_evidence_id else None,
                             "page": item.source_page,
                             "evidence_fragment": item.evidence_fragment,
                             "confidence": item.confidence,
@@ -118,16 +125,13 @@ class ComparisonEngine:
                             "delivery": float(delivery),
                         },
                         "score": float(score),
-                        "warnings": row_warnings,
+                        "warnings": sorted(set(row_warnings)),
                     }
                 )
 
         ranked = sorted(
             (
-                (
-                    (sum(scores, Decimal("0")) / Decimal(len(scores))).quantize(Decimal("0.01")),
-                    supplier_id,
-                )
+                ((sum(scores, Decimal("0")) / Decimal(len(scores))).quantize(Decimal("0.01")), supplier_id)
                 for supplier_id, scores in supplier_scores.items()
             ),
             key=lambda value: (-value[0], value[1]),
@@ -145,8 +149,8 @@ class ComparisonEngine:
             },
             "score": float(best_score),
             "explanation": (
-                "The supplier has the highest deterministic MVP score across technical "
-                "compliance, price and delivery time. Extracted values remain subject to review."
+                "The supplier has the highest deterministic MVP score across technical compliance, price and delivery time. "
+                "No currency conversion is performed and extracted values remain subject to review."
             ),
             "warnings": sorted(set(warnings)),
             "human_review_required": True,
