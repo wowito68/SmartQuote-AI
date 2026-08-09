@@ -10,17 +10,18 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.config.settings import get_settings
 
-SQLITE_DB_PATH = Path("/tmp/smartquote_iteration9_test.db")
+SQLITE_DB_PATH = Path("/tmp/smartquote_iteration11_test.db")
 DEFAULT_TEST_DATABASE_URL = f"sqlite+pysqlite:///{SQLITE_DB_PATH}"
 TEST_DATABASE_URL = os.environ.get("SMARTQUOTE_DATABASE_URL", DEFAULT_TEST_DATABASE_URL)
 USING_SQLITE = TEST_DATABASE_URL.startswith("sqlite")
 
 os.environ.setdefault("SMARTQUOTE_DATABASE_URL", TEST_DATABASE_URL)
 os.environ["SMARTQUOTE_ENVIRONMENT"] = "test"
-os.environ.setdefault("SMARTQUOTE_STORAGE_ROOT", "/tmp/smartquote_iteration9_storage")
+os.environ.setdefault("SMARTQUOTE_STORAGE_ROOT", "/tmp/smartquote_iteration11_storage")
 os.environ.setdefault("SMARTQUOTE_CELERY_BROKER_URL", "memory://")
 os.environ.setdefault("SMARTQUOTE_CELERY_RESULT_BACKEND", "cache+memory://")
 os.environ.setdefault("SMARTQUOTE_CELERY_TASK_ALWAYS_EAGER", "true")
+os.environ["SMARTQUOTE_EMAIL_MODE"] = "simulation"
 get_settings.cache_clear()
 
 
@@ -74,7 +75,9 @@ def clean_database_after_test(db_engine: Engine) -> Generator[None]:
         connection.execute(text("DELETE FROM quote_extraction_runs"))
         connection.execute(text("DELETE FROM quotes"))
         connection.execute(text("DELETE FROM outbound_message_logs"))
+        connection.execute(text("DELETE FROM rfq_task_records"))
         connection.execute(text("DELETE FROM email_messages"))
+        connection.execute(text("DELETE FROM rfq_versions"))
         connection.execute(text("DELETE FROM email_attachments"))
         connection.execute(text("DELETE FROM rfq_requests"))
         connection.execute(text("DELETE FROM supplier_merge_suggestions"))
