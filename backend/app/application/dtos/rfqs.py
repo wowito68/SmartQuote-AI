@@ -47,6 +47,7 @@ class RfqResponse:
     tender_id: UUID
     tender_supplier_id: UUID
     supplier_id: UUID
+    contact_id: UUID | None
     catalog_snapshot_id: UUID
     status: RfqStatus
     version: int
@@ -140,6 +141,7 @@ class EmailMessageResponse:
     error_message: str | None
     started_at: datetime | None
     sent_at: datetime | None
+    failed_at: datetime | None
     duration_ms: int | None
     created_at: datetime
 
@@ -149,6 +151,7 @@ class RfqMessagesResponse:
     rfq_id: UUID
     messages: tuple[EmailMessageResponse, ...]
     logs: tuple[OutboundLogResponse, ...]
+
 
 @dataclass(frozen=True, slots=True)
 class CompanyProfile:
