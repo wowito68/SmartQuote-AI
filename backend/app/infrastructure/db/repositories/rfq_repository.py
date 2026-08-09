@@ -114,6 +114,31 @@ class SqlAlchemyRfqRepository(RfqRepository):
         return [attachment_to_domain(model) for model in self._session.scalars(statement)]
 
     def create_message(self, message: EmailMessage) -> EmailMessage:
+        existing = self._session.scalars(
+            select(EmailMessageModel).where(
+                EmailMessageModel.idempotency_key == message.idempotency_key
+            )
+        ).first()
+        if existing is not None:
+            if existing.status != "sent":
+                existing.status = message.status.value
+                existing.provider_name = message.provider_name
+                existing.from_address = message.from_address
+                existing.to_recipients = list(message.to_recipients)
+                existing.cc_recipients = list(message.cc_recipients)
+                existing.bcc_recipients = list(message.bcc_recipients)
+                existing.subject = message.subject
+                existing.body = message.body
+                existing.attachment_snapshot = list(message.attachment_snapshot)
+                existing.external_message_id = None
+                existing.error_type = None
+                existing.error_message = None
+                existing.started_at = message.started_at
+                existing.sent_at = None
+                existing.failed_at = None
+                existing.duration_ms = None
+                self._session.flush()
+            return message_to_domain(existing)
         model = message_to_model(message)
         self._session.add(model)
         self._session.flush()
