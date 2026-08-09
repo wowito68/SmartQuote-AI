@@ -25,13 +25,14 @@ class RfqRequestModel(Base):
     __table_args__ = (
         CheckConstraint(
             "status IN ('draft', 'pending_review', 'approved', 'queued', 'sending', "
-            "'sent', 'delivered', 'failed', 'cancelled')",
+            "'sent', 'delivered', 'responded', 'failed', 'retry_pending', 'cancelled')",
             name="valid_rfq_status",
         ),
         UniqueConstraint("tender_id", "generation_key", name="uq_rfq_tender_generation"),
         UniqueConstraint("send_idempotency_key", name="uq_rfq_send_idempotency"),
         Index("ix_rfq_requests_tender", "tender_id"),
         Index("ix_rfq_requests_supplier", "tender_supplier_id"),
+        Index("ix_rfq_requests_contact", "contact_id"),
         Index("ix_rfq_requests_status", "status"),
     )
 
@@ -44,6 +45,9 @@ class RfqRequestModel(Base):
     )
     supplier_id: Mapped[UUID] = mapped_column(
         Uuid, ForeignKey("suppliers.id", ondelete="RESTRICT"), nullable=False
+    )
+    contact_id: Mapped[UUID | None] = mapped_column(
+        Uuid, ForeignKey("supplier_contacts.id", ondelete="RESTRICT"), nullable=True
     )
     catalog_snapshot_id: Mapped[UUID] = mapped_column(
         Uuid, ForeignKey("catalog_snapshots.id", ondelete="RESTRICT"), nullable=False
@@ -94,6 +98,36 @@ class RfqRequestModel(Base):
     )
 
 
+class RfqVersionModel(Base):
+    __tablename__ = "rfq_versions"
+    __table_args__ = (
+        UniqueConstraint("rfq_id", "version", name="uq_rfq_versions_rfq_version"),
+        Index("ix_rfq_versions_rfq", "rfq_id"),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True)
+    rfq_id: Mapped[UUID] = mapped_column(
+        Uuid, ForeignKey("rfq_requests.id", ondelete="CASCADE"), nullable=False
+    )
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    changed_by_user_id: Mapped[UUID] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    status: Mapped[str] = mapped_column(String(30), nullable=False)
+    contact_id: Mapped[UUID | None] = mapped_column(
+        Uuid, ForeignKey("supplier_contacts.id", ondelete="RESTRICT"), nullable=True
+    )
+    subject: Mapped[str] = mapped_column(String(998), nullable=False)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    to_recipients: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    cc_recipients: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    bcc_recipients: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    products: Mapped[list[dict[str, Any]]] = mapped_column(JSON, nullable=False)
+    attachment_snapshot: Mapped[list[dict[str, Any]]] = mapped_column(JSON, nullable=False)
+    change_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
 class EmailAttachmentModel(Base):
     __tablename__ = "email_attachments"
     __table_args__ = (
@@ -119,10 +153,11 @@ class EmailMessageModel(Base):
     __tablename__ = "email_messages"
     __table_args__ = (
         CheckConstraint(
-            "status IN ('queued', 'sending', 'sent', 'failed')",
+            "status IN ('queued', 'sending', 'sent', 'failed', 'bounced')",
             name="valid_email_message_status",
         ),
         UniqueConstraint("rfq_id", "attempt_number", name="uq_email_message_attempt"),
+        UniqueConstraint("idempotency_key", name="uq_email_messages_idempotency_key"),
         Index("ix_email_messages_rfq", "rfq_id"),
         Index("ix_email_messages_idempotency", "idempotency_key"),
         Index("ix_email_messages_status", "status"),
@@ -149,8 +184,36 @@ class EmailMessageModel(Base):
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    failed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class RfqTaskRecordModel(Base):
+    __tablename__ = "rfq_task_records"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('queued', 'running', 'succeeded', 'failed', 'retry_pending')",
+            name="valid_rfq_task_status",
+        ),
+        UniqueConstraint("correlation_id", name="uq_rfq_task_records_correlation"),
+        Index("ix_rfq_task_records_rfq", "rfq_id"),
+        Index("ix_rfq_task_records_status", "status"),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True)
+    rfq_id: Mapped[UUID] = mapped_column(
+        Uuid, ForeignKey("rfq_requests.id", ondelete="CASCADE"), nullable=False
+    )
+    correlation_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    task_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    status: Mapped[str] = mapped_column(String(30), nullable=False)
+    attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    queued_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
 class OutboundMessageLogModel(Base):
