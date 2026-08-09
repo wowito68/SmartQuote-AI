@@ -84,10 +84,16 @@ class OpenAIExtractionService(AIExtractionService):
 
     @staticmethod
     def _render_pages(pages: tuple[dict[str, Any], ...]) -> str:
-        return "\n\n".join(
-            f"--- PAGE {page['page_number']} ---\n{page['text']}"
-            for page in pages
-        )
+        rendered: list[str] = []
+        for index, page in enumerate(pages, start=1):
+            locator = page.get("locator")
+            if not locator:
+                locator = f"page:{page.get('page_number', index)}"
+            kind = page.get("locator_type") or ("page" if page.get("page_number") else "section")
+            rendered.append(
+                f"--- SOURCE {index} [{kind} {locator}] ---\n{page.get('text', '')}"
+            )
+        return "\n\n".join(rendered)
 
     def extract(self, request: AIExtractionRequest) -> AIExtractionResult:
         user_text = request.prompt.user_template.format(
