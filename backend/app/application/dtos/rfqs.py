@@ -47,7 +47,6 @@ class RfqResponse:
     tender_id: UUID
     tender_supplier_id: UUID
     supplier_id: UUID
-    contact_id: UUID | None
     catalog_snapshot_id: UUID
     status: RfqStatus
     version: int
@@ -79,6 +78,7 @@ class RfqResponse:
     attachments: tuple[RfqAttachmentResponse, ...]
     created_at: datetime
     updated_at: datetime
+    contact_id: UUID | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -141,9 +141,9 @@ class EmailMessageResponse:
     error_message: str | None
     started_at: datetime | None
     sent_at: datetime | None
-    failed_at: datetime | None
     duration_ms: int | None
     created_at: datetime
+    failed_at: datetime | None = None
 
 
 @dataclass(frozen=True, slots=True)
