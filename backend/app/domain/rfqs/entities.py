@@ -11,6 +11,7 @@ from app.domain.rfqs.value_objects import (
     EmailMessageStatus,
     OutboundLogResult,
     RfqStatus,
+    TaskRecordStatus,
 )
 from app.domain.shared.exceptions import ValidationError
 
@@ -43,17 +44,39 @@ def _normalize_addresses(values: tuple[str, ...]) -> tuple[str, ...]:
     return normalized
 
 
+def build_send_idempotency_key(
+    rfq_id: UUID,
+    rfq_version: int,
+    recipients: tuple[str, ...],
+    send_intent: str = "rfq_send",
+) -> str:
+    payload = {
+        "rfq_id": str(rfq_id),
+        "rfq_version": rfq_version,
+        "recipients": sorted(EmailAddress(value).value for value in recipients),
+        "send_intent": send_intent,
+    }
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+    return hashlib.sha256(encoded).hexdigest()
+
+
 _RFQ_TRANSITIONS: dict[RfqStatus, frozenset[RfqStatus]] = {
     RfqStatus.DRAFT: frozenset({RfqStatus.PENDING_REVIEW, RfqStatus.CANCELLED}),
-    RfqStatus.PENDING_REVIEW: frozenset({RfqStatus.APPROVED, RfqStatus.CANCELLED}),
+    RfqStatus.PENDING_REVIEW: frozenset(
+        {RfqStatus.DRAFT, RfqStatus.APPROVED, RfqStatus.CANCELLED}
+    ),
     RfqStatus.APPROVED: frozenset({RfqStatus.QUEUED, RfqStatus.CANCELLED}),
     RfqStatus.QUEUED: frozenset(
-        {RfqStatus.SENDING, RfqStatus.FAILED, RfqStatus.CANCELLED}
+        {RfqStatus.SENDING, RfqStatus.FAILED, RfqStatus.RETRY_PENDING, RfqStatus.CANCELLED}
     ),
-    RfqStatus.SENDING: frozenset({RfqStatus.SENT, RfqStatus.FAILED}),
+    RfqStatus.SENDING: frozenset(
+        {RfqStatus.SENT, RfqStatus.FAILED, RfqStatus.RETRY_PENDING}
+    ),
     RfqStatus.SENT: frozenset({RfqStatus.DELIVERED}),
-    RfqStatus.DELIVERED: frozenset(),
-    RfqStatus.FAILED: frozenset({RfqStatus.QUEUED, RfqStatus.CANCELLED}),
+    RfqStatus.DELIVERED: frozenset({RfqStatus.RESPONDED}),
+    RfqStatus.RESPONDED: frozenset(),
+    RfqStatus.FAILED: frozenset({RfqStatus.RETRY_PENDING, RfqStatus.CANCELLED}),
+    RfqStatus.RETRY_PENDING: frozenset({RfqStatus.QUEUED, RfqStatus.CANCELLED}),
     RfqStatus.CANCELLED: frozenset(),
 }
 
@@ -131,6 +154,7 @@ class RfqRequest:
     products: tuple[dict[str, Any], ...]
     generation_key: str
     generation_duration_ms: int = 0
+    contact_id: UUID | None = None
     to_recipients: tuple[str, ...] = ()
     cc_recipients: tuple[str, ...] = ()
     bcc_recipients: tuple[str, ...] = ()
@@ -207,6 +231,12 @@ class RfqRequest:
     def start_review(self) -> None:
         self._transition(RfqStatus.PENDING_REVIEW)
 
+    def reject_review(self) -> None:
+        self._transition(RfqStatus.DRAFT)
+        self.approved_by_user_id = None
+        self.approved_at = None
+        self.send_idempotency_key = None
+
     def edit(
         self,
         *,
@@ -262,12 +292,22 @@ class RfqRequest:
             self.contact_name = normalized
         if changed:
             self.version += 1
+            self.send_idempotency_key = None
+            self.approved_by_user_id = None
+            self.approved_at = None
+            if self.status is RfqStatus.PENDING_REVIEW:
+                self.status = RfqStatus.DRAFT
             self.updated_at = _now()
 
     def record_attachment_edit(self) -> None:
         if self.status not in {RfqStatus.DRAFT, RfqStatus.PENDING_REVIEW}:
             raise InvalidRfqState("Only draft or pending-review RFQs can be edited.")
         self.version += 1
+        self.send_idempotency_key = None
+        self.approved_by_user_id = None
+        self.approved_at = None
+        if self.status is RfqStatus.PENDING_REVIEW:
+            self.status = RfqStatus.DRAFT
         self.updated_at = _now()
 
     def approve(self, user_id: UUID, attachments: tuple[EmailAttachment, ...]) -> None:
@@ -275,19 +315,11 @@ class RfqRequest:
             raise InvalidRfqState("Only pending-review RFQs can be approved.")
         if not self.to_recipients:
             raise ValidationError("RFQ requires at least one primary recipient before approval.")
-        digest_payload = {
-            "rfq_id": str(self.id),
-            "version": self.version,
-            "to": self.to_recipients,
-            "cc": self.cc_recipients,
-            "bcc": self.bcc_recipients,
-            "subject": self.subject,
-            "body": self.body,
-            "deadline": self.response_deadline.isoformat(),
-            "attachments": [attachment.snapshot() for attachment in attachments],
-        }
-        encoded = json.dumps(digest_payload, sort_keys=True, separators=(",", ":")).encode()
-        self.send_idempotency_key = hashlib.sha256(encoded).hexdigest()
+        self.send_idempotency_key = build_send_idempotency_key(
+            self.id,
+            self.version,
+            self.to_recipients,
+        )
         self._transition(RfqStatus.APPROVED)
         self.approved_by_user_id = user_id
         self.approved_at = self.updated_at
@@ -315,13 +347,48 @@ class RfqRequest:
 
     def mark_failed(self, error: str) -> None:
         self._transition(RfqStatus.FAILED)
-        self.last_error = (_clean(error, limit=4000) or "Email delivery failed.")
+        self.last_error = _clean(error, limit=4000) or "Email delivery failed."
+
+    def mark_retry_pending(self, error: str | None = None) -> None:
+        self._transition(RfqStatus.RETRY_PENDING)
+        if error:
+            self.last_error = _clean(error, limit=4000)
 
     def cancel(self, user_id: UUID, reason: str | None = None) -> None:
         self._transition(RfqStatus.CANCELLED)
         self.cancelled_by_user_id = user_id
         self.cancelled_at = self.updated_at
         self.cancellation_reason = _clean(reason, limit=2000)
+
+
+@dataclass(frozen=True, slots=True)
+class RfqVersionSnapshot:
+    rfq_id: UUID
+    version: int
+    changed_by_user_id: UUID
+    status: RfqStatus
+    contact_id: UUID | None
+    subject: str
+    body: str
+    to_recipients: tuple[str, ...]
+    cc_recipients: tuple[str, ...]
+    bcc_recipients: tuple[str, ...]
+    products: tuple[dict[str, Any], ...]
+    attachment_snapshot: tuple[dict[str, Any], ...]
+    change_reason: str | None = None
+    id: UUID = field(default_factory=uuid4)
+    created_at: datetime = field(default_factory=_now)
+
+    def __post_init__(self) -> None:
+        if self.version < 1:
+            raise ValidationError("RFQ version must be positive.")
+        if not self.subject.strip() or not self.body.strip():
+            raise ValidationError("RFQ version subject and body are required.")
+        object.__setattr__(self, "to_recipients", _normalize_addresses(self.to_recipients))
+        object.__setattr__(self, "cc_recipients", _normalize_addresses(self.cc_recipients))
+        object.__setattr__(self, "bcc_recipients", _normalize_addresses(self.bcc_recipients))
+        object.__setattr__(self, "change_reason", _clean(self.change_reason, limit=2000))
+        object.__setattr__(self, "created_at", _as_utc(self.created_at))
 
 
 @dataclass(slots=True)
@@ -345,6 +412,7 @@ class EmailMessage:
     error_message: str | None = None
     started_at: datetime | None = None
     sent_at: datetime | None = None
+    failed_at: datetime | None = None
     duration_ms: int | None = None
     created_at: datetime = field(default_factory=_now)
 
@@ -362,6 +430,8 @@ class EmailMessage:
         if not self.subject.strip() or not self.body.strip():
             raise ValidationError("Email message subject and body are required.")
         self.created_at = _as_utc(self.created_at)
+        if self.failed_at is not None:
+            self.failed_at = _as_utc(self.failed_at)
 
     def start(self) -> None:
         if self.status is not EmailMessageStatus.QUEUED:
@@ -379,6 +449,7 @@ class EmailMessage:
         self.external_message_id = identifier
         self.duration_ms = max(duration_ms, 0)
         self.sent_at = _now()
+        self.failed_at = None
         self.error_type = None
         self.error_message = None
 
@@ -389,6 +460,54 @@ class EmailMessage:
         self.error_type = type(error).__name__
         self.error_message = str(error)[:4000]
         self.duration_ms = max(duration_ms, 0)
+        self.failed_at = _now()
+
+
+@dataclass(slots=True)
+class RfqTaskRecord:
+    rfq_id: UUID
+    correlation_id: str
+    task_name: str = "smartquote.rfqs.send"
+    status: TaskRecordStatus = TaskRecordStatus.QUEUED
+    attempt_count: int = 0
+    id: UUID = field(default_factory=uuid4)
+    last_error: str | None = None
+    queued_at: datetime = field(default_factory=_now)
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+    updated_at: datetime = field(default_factory=_now)
+
+    def __post_init__(self) -> None:
+        correlation = _clean(self.correlation_id, limit=255)
+        task_name = _clean(self.task_name, limit=255)
+        if not correlation or not task_name:
+            raise ValidationError("Task correlation id and task name are required.")
+        self.correlation_id = correlation
+        self.task_name = task_name
+
+    def start(self) -> None:
+        self.status = TaskRecordStatus.RUNNING
+        self.attempt_count += 1
+        self.started_at = _now()
+        self.updated_at = self.started_at
+        self.last_error = None
+
+    def retry(self, error: str) -> None:
+        self.status = TaskRecordStatus.RETRY_PENDING
+        self.last_error = _clean(error, limit=4000)
+        self.updated_at = _now()
+
+    def fail(self, error: str) -> None:
+        self.status = TaskRecordStatus.FAILED
+        self.last_error = _clean(error, limit=4000)
+        self.completed_at = _now()
+        self.updated_at = self.completed_at
+
+    def succeed(self) -> None:
+        self.status = TaskRecordStatus.SUCCEEDED
+        self.completed_at = _now()
+        self.updated_at = self.completed_at
+        self.last_error = None
 
 
 @dataclass(frozen=True, slots=True)
