@@ -6,6 +6,7 @@ Create Date: 2026-08-08 23:55:00
 """
 
 from collections.abc import Sequence
+import hashlib
 
 import sqlalchemy as sa
 from alembic import op
@@ -27,6 +28,42 @@ def _replace_check(table: str, name: str, expression: str) -> None:
         op.create_check_constraint(name, table, expression)
 
 
+def _reconcile_legacy_message_idempotency() -> None:
+    """Make legacy retry rows unique before adding the database constraint.
+
+    Iteration 8 allowed multiple transport attempts to share the RFQ send key. The
+    hardened model reuses one EmailMessage for retries. Existing duplicate rows are
+    retained, but only one keeps the canonical key; the others receive deterministic
+    SHA-256 legacy keys so no history is deleted.
+    """
+    bind = op.get_bind()
+    rows = bind.execute(
+        sa.text(
+            "SELECT idempotency_key FROM email_messages "
+            "GROUP BY idempotency_key HAVING COUNT(*) > 1"
+        )
+    ).fetchall()
+    for (key,) in rows:
+        attempts = bind.execute(
+            sa.text(
+                "SELECT id, status FROM email_messages "
+                "WHERE idempotency_key = :key "
+                "ORDER BY CASE WHEN status = 'sent' THEN 0 ELSE 1 END, attempt_number, created_at"
+            ),
+            {"key": key},
+        ).fetchall()
+        for message_id, _status in attempts[1:]:
+            replacement = hashlib.sha256(
+                f"legacy-email-attempt|{key}|{message_id}".encode()
+            ).hexdigest()
+            bind.execute(
+                sa.text(
+                    "UPDATE email_messages SET idempotency_key = :replacement WHERE id = :id"
+                ),
+                {"replacement": replacement, "id": message_id},
+            )
+
+
 def upgrade() -> None:
     with op.batch_alter_table("rfq_requests") as batch_op:
         batch_op.add_column(sa.Column("contact_id", sa.Uuid(), nullable=True))
@@ -40,7 +77,7 @@ def upgrade() -> None:
         batch_op.create_index("ix_rfq_requests_contact", ["contact_id"])
 
     # Iteration 9 renamed this constraint to `valid_rfq_status`; keep the
-    # physical database name stable so clean and upgraded databases behave identically.
+    # logical constraint name stable so the naming convention is applied once.
     _replace_check(
         "rfq_requests",
         "valid_rfq_status",
@@ -50,6 +87,10 @@ def upgrade() -> None:
 
     with op.batch_alter_table("email_messages") as batch_op:
         batch_op.add_column(sa.Column("failed_at", sa.DateTime(timezone=True), nullable=True))
+
+    _reconcile_legacy_message_idempotency()
+
+    with op.batch_alter_table("email_messages") as batch_op:
         batch_op.create_unique_constraint(
             "uq_email_messages_idempotency_key",
             ["idempotency_key"],
@@ -57,7 +98,7 @@ def upgrade() -> None:
 
     _replace_check(
         "email_messages",
-        "ck_email_messages_valid_email_message_status",
+        "valid_email_message_status",
         "status IN ('queued', 'sending', 'sent', 'failed', 'bounced')",
     )
 
@@ -101,7 +142,7 @@ def upgrade() -> None:
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
         sa.CheckConstraint(
             "status IN ('queued', 'running', 'succeeded', 'failed', 'retry_pending')",
-            name="ck_rfq_task_records_valid_status",
+            name="valid_rfq_task_status",
         ),
         sa.ForeignKeyConstraint(["rfq_id"], ["rfq_requests.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
@@ -120,7 +161,7 @@ def downgrade() -> None:
 
     _replace_check(
         "email_messages",
-        "ck_email_messages_valid_email_message_status",
+        "valid_email_message_status",
         "status IN ('queued', 'sending', 'sent', 'failed')",
     )
     with op.batch_alter_table("email_messages") as batch_op:
