@@ -1,4 +1,5 @@
 import smtplib
+import socket
 import time
 from email.message import EmailMessage as StandardEmailMessage
 from email.utils import formataddr
@@ -6,7 +7,13 @@ from email.utils import formataddr
 from app.application.ports.attachment_provider import AttachmentContent
 from app.application.ports.email_sender import EmailSender, EmailSendResult
 from app.domain.rfqs.entities import EmailMessage
-from app.domain.rfqs.exceptions import EmailDeliveryError
+from app.domain.rfqs.exceptions import (
+    AmbiguousEmailDeliveryError,
+    PermanentEmailDeliveryError,
+    RetryableEmailDeliveryError,
+)
+
+_TRANSIENT_SMTP_CODES = {421, 450, 451, 452}
 
 
 class SMTPEmailSender(EmailSender):
@@ -78,12 +85,36 @@ class SMTPEmailSender(EmailSender):
                     client.login(self._username, self._password or "")
                 refused = client.send_message(payload)
                 if refused:
-                    raise EmailDeliveryError(
+                    raise PermanentEmailDeliveryError(
                         f"SMTP provider refused {len(refused)} recipient(s)."
                     )
-        except EmailDeliveryError:
+        except PermanentEmailDeliveryError:
             raise
-        except (OSError, smtplib.SMTPException) as exc:
-            raise EmailDeliveryError("SMTP delivery failed.") from exc
+        except smtplib.SMTPAuthenticationError as exc:
+            raise PermanentEmailDeliveryError("SMTP authentication failed.") from exc
+        except smtplib.SMTPRecipientsRefused as exc:
+            raise PermanentEmailDeliveryError("SMTP recipients were rejected.") from exc
+        except smtplib.SMTPResponseException as exc:
+            if exc.smtp_code in _TRANSIENT_SMTP_CODES:
+                raise RetryableEmailDeliveryError(
+                    f"SMTP temporary failure ({exc.smtp_code})."
+                ) from exc
+            raise PermanentEmailDeliveryError(
+                f"SMTP provider rejected delivery ({exc.smtp_code})."
+            ) from exc
+        except (TimeoutError, socket.timeout, ConnectionError) as exc:
+            raise RetryableEmailDeliveryError("SMTP connection timed out or was unavailable.") from exc
+        except smtplib.SMTPServerDisconnected as exc:
+            raise AmbiguousEmailDeliveryError(
+                "SMTP connection was lost; provider acceptance is unknown."
+            ) from exc
+        except OSError as exc:
+            raise RetryableEmailDeliveryError("SMTP transport is temporarily unavailable.") from exc
+        except smtplib.SMTPException as exc:
+            raise PermanentEmailDeliveryError("SMTP delivery failed.") from exc
         duration_ms = round((time.perf_counter() - started) * 1000)
-        return EmailSendResult(self.provider_name, external_message_id, duration_ms)
+        return EmailSendResult(
+            provider_name=self.provider_name,
+            external_message_id=external_message_id,
+            duration_ms=duration_ms,
+        )
