@@ -8,6 +8,9 @@ export type TenderStatus =
   | "supplier_review"
   | "rfq_ready"
   | "waiting_quotes"
+  | "quote_analysis"
+  | "comparison_ready"
+  | "awarded"
   | "closed"
   | "cancelled"
   | string;
@@ -168,32 +171,37 @@ export type TenderSuppliers = {
   metrics: SupplierMetrics;
 };
 
+export type RfqAttachment = {
+  id: UUID;
+  document_id: UUID;
+  original_file_name: string;
+  file_hash: string;
+  file_size: number;
+  mime_type: string;
+};
+
 export type Rfq = {
   id: UUID;
   tender_id: UUID;
   tender_supplier_id: UUID;
   supplier_id: UUID;
+  contact_id: UUID | null;
   status: string;
   version: number;
   subject: string;
   body: string;
+  products: Array<Record<string, unknown>>;
   to_recipients: string[];
   cc_recipients: string[];
   bcc_recipients: string[];
+  contact_name: string | null;
   response_deadline: string;
   observations: string | null;
   approved_at: string | null;
   queued_at: string | null;
   sent_at: string | null;
   last_error: string | null;
-  attachments: Array<{
-    id: UUID;
-    document_id: UUID;
-    original_file_name: string;
-    file_hash: string;
-    file_size: number;
-    mime_type: string;
-  }>;
+  attachments: RfqAttachment[];
   created_at: string;
   updated_at: string;
 };
@@ -213,4 +221,59 @@ export type TenderRfqs = {
   tender_id: UUID;
   rfqs: Rfq[];
   metrics: RfqMetrics;
+};
+
+export type EmailMessageRecord = {
+  id: UUID;
+  rfq_id: UUID;
+  rfq_version: number;
+  attempt_number: number;
+  idempotency_key: string;
+  provider_name: string;
+  from_address: string;
+  to_recipients: string[];
+  subject: string;
+  status: string;
+  external_message_id: string | null;
+  error_type: string | null;
+  error_message: string | null;
+  started_at: string | null;
+  sent_at: string | null;
+  failed_at: string | null;
+  duration_ms: number | null;
+  created_at: string;
+};
+
+export type RfqMessages = {
+  rfq_id: UUID;
+  messages: EmailMessageRecord[];
+  logs: Array<{
+    id: UUID;
+    event_type: string;
+    result: string;
+    provider_name: string;
+    details: Record<string, unknown>;
+    occurred_at: string;
+  }>;
+};
+
+export type RfqVersion = {
+  id: UUID;
+  rfq_id: UUID;
+  version: number;
+  changed_by_user_id: UUID;
+  status: string;
+  contact_id: UUID | null;
+  subject: string;
+  body: string;
+  to_recipients: string[];
+  products: Array<Record<string, unknown>>;
+  attachment_snapshot: Array<Record<string, unknown>>;
+  change_reason: string | null;
+  created_at: string;
+};
+
+export type RfqVersions = {
+  rfq_id: UUID;
+  versions: RfqVersion[];
 };
