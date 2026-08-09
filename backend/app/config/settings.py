@@ -11,7 +11,7 @@ EmailMode = Literal["simulation", "smtp"]
 
 class Settings(BaseSettings):
     project_name: str = Field(default="SmartQuote AI")
-    version: str = Field(default="0.7.0")
+    version: str = Field(default="0.8.0")
     environment: Environment = Field(default="local")
     api_v1_prefix: str = Field(default="/api/v1")
     database_url: SecretStr
@@ -40,7 +40,7 @@ class Settings(BaseSettings):
     openai_timeout_seconds: float = Field(default=90.0, gt=0, le=600)
     ai_model: str = Field(default="gpt-5-mini")
     ai_prompt_version: str = Field(default="1.0.0")
-    quote_ai_prompt_version: str = Field(default="1.0.0")
+    quote_ai_prompt_version: str = Field(default="2.0.0")
     ai_temperature: float = Field(default=0.0, ge=0, le=2)
     ai_input_cost_per_million_tokens: float = Field(default=0.0, ge=0)
     ai_output_cost_per_million_tokens: float = Field(default=0.0, ge=0)
