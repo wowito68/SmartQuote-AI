@@ -6,11 +6,12 @@ from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 Environment = Literal["local", "test", "staging", "production"]
+EmailMode = Literal["simulation", "smtp"]
 
 
 class Settings(BaseSettings):
     project_name: str = Field(default="SmartQuote AI")
-    version: str = Field(default="0.6.0")
+    version: str = Field(default="0.7.0")
     environment: Environment = Field(default="local")
     api_v1_prefix: str = Field(default="/api/v1")
     database_url: SecretStr
@@ -59,8 +60,11 @@ class Settings(BaseSettings):
     company_email: str = Field(default="procurement@smartquote.local")
     company_phone: str | None = Field(default=None)
     rfq_template_name: str = Field(default="supplier_rfq")
-    rfq_template_version: str = Field(default="1.0.0")
+    rfq_template_version: str = Field(default="2.0.0")
     max_email_attachment_bytes: int = Field(default=25 * 1024 * 1024, gt=0)
+    email_mode: EmailMode = Field(default="simulation")
+    rfq_delivery_rate_limit: str = Field(default="10/m")
+    rfq_delivery_max_retries: int = Field(default=3, ge=0, le=10)
     smtp_host: str = Field(default="localhost")
     smtp_port: int = Field(default=1025, ge=1, le=65535)
     smtp_username: str | None = Field(default=None)
