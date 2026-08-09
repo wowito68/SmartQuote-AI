@@ -39,9 +39,11 @@ def upgrade() -> None:
         )
         batch_op.create_index("ix_rfq_requests_contact", ["contact_id"])
 
+    # Iteration 9 renamed this constraint to `valid_rfq_status`; keep the
+    # physical database name stable so clean and upgraded databases behave identically.
     _replace_check(
         "rfq_requests",
-        "ck_rfq_requests_valid_rfq_status",
+        "valid_rfq_status",
         "status IN ('draft', 'pending_review', 'approved', 'queued', 'sending', "
         "'sent', 'delivered', 'responded', 'failed', 'retry_pending', 'cancelled')",
     )
@@ -127,9 +129,9 @@ def downgrade() -> None:
 
     _replace_check(
         "rfq_requests",
-        "ck_rfq_requests_valid_rfq_status",
+        "valid_rfq_status",
         "status IN ('draft', 'pending_review', 'approved', 'queued', 'sending', "
-        "'sent', 'delivered', 'failed', 'cancelled')",
+        "'sent', 'delivered', 'responded', 'failed', 'cancelled')",
     )
     with op.batch_alter_table("rfq_requests") as batch_op:
         batch_op.drop_index("ix_rfq_requests_contact")
