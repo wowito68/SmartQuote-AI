@@ -2,6 +2,8 @@ import type {
   DocumentListResponse,
   DocumentStatus,
   Rfq,
+  RfqMessages,
+  RfqVersions,
   Tender,
   TenderCatalog,
   TenderListResponse,
@@ -171,6 +173,27 @@ export const api = {
       body: JSON.stringify({ reviewer_user_id: userId, reason })
     }),
 
+  generateRfq: (
+    tenderId: UUID,
+    payload: {
+      supplier_id: UUID;
+      contact_id: UUID;
+      product_ids: UUID[];
+      document_ids: UUID[];
+      generated_by_user_id: UUID;
+      response_deadline: string;
+      observations: string | null;
+      requested_currency: string | null;
+      commercial_terms: string | null;
+      quote_validity: string | null;
+      response_instructions: string | null;
+    }
+  ) =>
+    request<Rfq>(`/api/v1/tenders/${tenderId}/rfqs`, {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }),
+
   generateRfqs: (
     tenderId: UUID,
     payload: {
@@ -190,15 +213,62 @@ export const api = {
 
   listRfqs: (tenderId: UUID) => request<TenderRfqs>(`/api/v1/tenders/${tenderId}/rfqs`),
 
+  getRfq: (rfqId: UUID) => request<Rfq>(`/api/v1/rfqs/${rfqId}`),
+
+  updateRfq: (
+    rfqId: UUID,
+    payload: {
+      changed_by_user_id: UUID;
+      subject?: string;
+      body?: string;
+      response_deadline?: string;
+      observations?: string | null;
+      document_ids?: UUID[];
+      change_reason?: string | null;
+    }
+  ) =>
+    request<Rfq>(`/api/v1/rfqs/${rfqId}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload)
+    }),
+
+  submitRfqReview: (rfqId: UUID, userId: UUID) =>
+    request<Rfq>(`/api/v1/rfqs/${rfqId}/submit-review`, {
+      method: "POST",
+      body: JSON.stringify({ reviewed_by_user_id: userId })
+    }),
+
   approveRfq: (rfqId: UUID, userId: UUID) =>
     request<Rfq>(`/api/v1/rfqs/${rfqId}/approve`, {
       method: "POST",
       body: JSON.stringify({ approved_by_user_id: userId })
     }),
 
+  rejectRfq: (rfqId: UUID, userId: UUID, reason: string) =>
+    request<Rfq>(`/api/v1/rfqs/${rfqId}/reject`, {
+      method: "POST",
+      body: JSON.stringify({ reviewed_by_user_id: userId, reason })
+    }),
+
   sendRfq: (rfqId: UUID, userId: UUID) =>
     request<Rfq>(`/api/v1/rfqs/${rfqId}/send`, {
       method: "POST",
       body: JSON.stringify({ requested_by_user_id: userId })
-    })
+    }),
+
+  retryRfq: (rfqId: UUID, userId: UUID) =>
+    request<Rfq>(`/api/v1/rfqs/${rfqId}/retry`, {
+      method: "POST",
+      body: JSON.stringify({ requested_by_user_id: userId })
+    }),
+
+  cancelRfq: (rfqId: UUID, userId: UUID, reason: string | null) =>
+    request<Rfq>(`/api/v1/rfqs/${rfqId}/cancel`, {
+      method: "POST",
+      body: JSON.stringify({ cancelled_by_user_id: userId, reason })
+    }),
+
+  getRfqMessages: (rfqId: UUID) => request<RfqMessages>(`/api/v1/rfqs/${rfqId}/messages`),
+
+  getRfqVersions: (rfqId: UUID) => request<RfqVersions>(`/api/v1/rfqs/${rfqId}/versions`)
 };
