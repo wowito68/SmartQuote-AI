@@ -14,9 +14,13 @@ from app.infrastructure.db.models.document_processing import (
 )
 from app.infrastructure.db.models.quote import (
     ComparisonRunModel,
+    QuoteDocumentModel,
+    QuoteEvidenceReferenceModel,
     QuoteExtractionRunModel,
     QuoteItemModel,
+    QuoteItemRevisionModel,
     QuoteModel,
+    QuoteTaskRecordModel,
 )
 from app.infrastructure.db.models.rfq import (
     EmailAttachmentModel,
@@ -54,9 +58,13 @@ __all__ = [
     "ExtractionRunModel",
     "OutboundMessageLogModel",
     "ProductSupplierMatchModel",
+    "QuoteDocumentModel",
+    "QuoteEvidenceReferenceModel",
     "QuoteExtractionRunModel",
     "QuoteItemModel",
+    "QuoteItemRevisionModel",
     "QuoteModel",
+    "QuoteTaskRecordModel",
     "RfqRequestModel",
     "RfqTaskRecordModel",
     "RfqVersionModel",
