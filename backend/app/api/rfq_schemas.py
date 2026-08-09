@@ -23,6 +23,29 @@ class GenerateRfqsRequestSchema(BaseModel):
         return value
 
 
+class GenerateRfqRequestSchema(BaseModel):
+    supplier_id: UUID
+    contact_id: UUID
+    product_ids: tuple[UUID, ...] = Field(min_length=1)
+    document_ids: tuple[UUID, ...] = ()
+    generated_by_user_id: UUID
+    response_deadline: datetime
+    observations: str | None = Field(default=None, max_length=5000)
+    requested_currency: str | None = Field(default=None, max_length=20)
+    commercial_terms: str | None = Field(default=None, max_length=5000)
+    quote_validity: str | None = Field(default=None, max_length=500)
+    response_instructions: str | None = Field(default=None, max_length=5000)
+    template_name: str = Field(default="supplier_rfq", min_length=1, max_length=100)
+    template_version: str = Field(default="2.0.0", min_length=1, max_length=50)
+
+    @field_validator("response_deadline")
+    @classmethod
+    def require_timezone(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("RFQ response deadline must include a timezone.")
+        return value
+
+
 class UpdateRfqRequestSchema(BaseModel):
     changed_by_user_id: UUID
     subject: str | None = Field(default=None, min_length=1, max_length=998)
@@ -34,6 +57,7 @@ class UpdateRfqRequestSchema(BaseModel):
     observations: str | None = Field(default=None, max_length=5000)
     contact_name: str | None = Field(default=None, max_length=255)
     document_ids: tuple[UUID, ...] | None = None
+    change_reason: str | None = Field(default=None, max_length=2000)
 
     @field_validator("response_deadline")
     @classmethod
@@ -41,6 +65,15 @@ class UpdateRfqRequestSchema(BaseModel):
         if value is not None and (value.tzinfo is None or value.utcoffset() is None):
             raise ValueError("RFQ response deadline must include a timezone.")
         return value
+
+
+class RfqReviewRequestSchema(BaseModel):
+    reviewed_by_user_id: UUID
+
+
+class RfqReviewRejectionRequestSchema(BaseModel):
+    reviewed_by_user_id: UUID
+    reason: str = Field(min_length=1, max_length=2000)
 
 
 class RfqApprovalRequestSchema(BaseModel):
@@ -53,6 +86,10 @@ class RfqCancellationRequestSchema(BaseModel):
 
 
 class RfqSendRequestSchema(BaseModel):
+    requested_by_user_id: UUID
+
+
+class RfqRetryRequestSchema(BaseModel):
     requested_by_user_id: UUID
 
 
@@ -72,6 +109,7 @@ class RfqResponseSchema(BaseModel):
     tender_id: UUID
     tender_supplier_id: UUID
     supplier_id: UUID
+    contact_id: UUID | None = None
     catalog_snapshot_id: UUID
     status: RfqStatus
     version: int = Field(ge=1)
@@ -159,6 +197,7 @@ class EmailMessageResponseSchema(BaseModel):
     error_message: str | None
     started_at: datetime | None
     sent_at: datetime | None
+    failed_at: datetime | None = None
     duration_ms: int | None
     created_at: datetime
 
@@ -180,5 +219,32 @@ class RfqMessagesResponseSchema(BaseModel):
     rfq_id: UUID
     messages: tuple[EmailMessageResponseSchema, ...]
     logs: tuple[OutboundLogResponseSchema, ...]
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class RfqVersionResponseSchema(BaseModel):
+    id: UUID
+    rfq_id: UUID
+    version: int
+    changed_by_user_id: UUID
+    status: RfqStatus
+    contact_id: UUID | None
+    subject: str
+    body: str
+    to_recipients: tuple[str, ...]
+    cc_recipients: tuple[str, ...]
+    bcc_recipients: tuple[str, ...]
+    products: tuple[dict[str, Any], ...]
+    attachment_snapshot: tuple[dict[str, Any], ...]
+    change_reason: str | None
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class RfqVersionsResponseSchema(BaseModel):
+    rfq_id: UUID
+    versions: tuple[RfqVersionResponseSchema, ...]
 
     model_config = ConfigDict(from_attributes=True)
