@@ -6,6 +6,8 @@ from app.domain.rfqs.entities import (
     EmailMessage,
     OutboundMessageLog,
     RfqRequest,
+    RfqTaskRecord,
+    RfqVersionSnapshot,
 )
 
 
@@ -24,6 +26,12 @@ class RfqRepository(ABC):
 
     @abstractmethod
     def list_rfqs(self, tender_id: UUID) -> list[RfqRequest]: ...
+
+    @abstractmethod
+    def create_version(self, version: RfqVersionSnapshot) -> RfqVersionSnapshot: ...
+
+    @abstractmethod
+    def list_versions(self, rfq_id: UUID) -> list[RfqVersionSnapshot]: ...
 
     @abstractmethod
     def replace_attachments(
@@ -45,6 +53,9 @@ class RfqRepository(ABC):
     ) -> EmailMessage | None: ...
 
     @abstractmethod
+    def get_message_by_idempotency(self, key: str) -> EmailMessage | None: ...
+
+    @abstractmethod
     def list_messages(self, rfq_id: UUID) -> list[EmailMessage]: ...
 
     @abstractmethod
@@ -52,6 +63,21 @@ class RfqRepository(ABC):
 
     @abstractmethod
     def next_attempt_number(self, rfq_id: UUID) -> int: ...
+
+    @abstractmethod
+    def create_task(self, task: RfqTaskRecord) -> RfqTaskRecord: ...
+
+    @abstractmethod
+    def update_task(self, task: RfqTaskRecord) -> RfqTaskRecord: ...
+
+    @abstractmethod
+    def get_task(self, task_id: UUID, *, for_update: bool = False) -> RfqTaskRecord | None: ...
+
+    @abstractmethod
+    def get_task_by_correlation(self, correlation_id: str) -> RfqTaskRecord | None: ...
+
+    @abstractmethod
+    def list_tasks(self, rfq_id: UUID) -> list[RfqTaskRecord]: ...
 
     @abstractmethod
     def add_log(self, log: OutboundMessageLog) -> OutboundMessageLog: ...
