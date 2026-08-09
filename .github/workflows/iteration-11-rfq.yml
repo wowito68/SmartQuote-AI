@@ -1,0 +1,94 @@
+name: Iteration 11 RFQ
+
+on:
+  push:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  rfq-backend:
+    name: RFQ workflow focused tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: smartquote
+          POSTGRES_PASSWORD: smartquote
+          POSTGRES_DB: smartquote
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U smartquote -d smartquote"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      SMARTQUOTE_DATABASE_URL: postgresql+psycopg://smartquote:smartquote@localhost:5432/smartquote
+      SMARTQUOTE_STORAGE_ROOT: /tmp/smartquote-iteration11-storage
+      SMARTQUOTE_CELERY_BROKER_URL: memory://
+      SMARTQUOTE_CELERY_RESULT_BACKEND: cache+memory://
+      SMARTQUOTE_CELERY_TASK_ALWAYS_EAGER: "true"
+      SMARTQUOTE_EMAIL_MODE: simulation
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+          enable-cache: true
+      - run: uv sync --frozen
+      - run: uv run alembic upgrade head
+      - name: RFQ unit, contract and integration tests
+        run: >-
+          uv run pytest
+          tests/unit/domain/test_rfq_domain.py
+          tests/unit/domain/test_rfq_iteration11.py
+          tests/unit/infrastructure/test_email_sender_contract.py
+          tests/integration/test_rfq_pipeline.py
+          tests/integration/test_rfq_iteration11.py
+          -q
+      - name: Validate Iteration 11 API contract
+        run: |
+          uv run python - <<'PY'
+          from app.main import app
+          schema = app.openapi()
+          expected = {
+              "/api/v1/tenders/{tender_id}/rfqs": {"post", "get"},
+              "/api/v1/rfqs/{rfq_id}": {"get", "put", "patch"},
+              "/api/v1/rfqs/{rfq_id}/submit-review": {"post"},
+              "/api/v1/rfqs/{rfq_id}/approve": {"post"},
+              "/api/v1/rfqs/{rfq_id}/reject": {"post"},
+              "/api/v1/rfqs/{rfq_id}/send": {"post"},
+              "/api/v1/rfqs/{rfq_id}/retry": {"post"},
+              "/api/v1/rfqs/{rfq_id}/cancel": {"post"},
+              "/api/v1/rfqs/{rfq_id}/messages": {"get"},
+              "/api/v1/rfqs/{rfq_id}/versions": {"get"},
+          }
+          for path, methods in expected.items():
+              assert path in schema["paths"]
+              assert methods <= set(schema["paths"][path])
+          PY
+
+  frontend:
+    name: RFQ frontend build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run build
