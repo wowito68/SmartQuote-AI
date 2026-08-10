@@ -5,6 +5,7 @@ Revises: f2b8c47d1e90
 Create Date: 2026-08-10 10:45:00
 """
 
+import json
 from collections.abc import Sequence
 from uuid import uuid4
 
@@ -86,13 +87,16 @@ def upgrade() -> None:
         )
     ).mappings()
     for row in rows:
+        structured_output = row["raw_response"]
+        if isinstance(structured_output, str):
+            structured_output = json.loads(structured_output)
         op.get_bind().execute(
             artifact_table.insert(),
             {
                 "id": uuid4(),
                 "extraction_run_id": row["id"],
                 "schema_version": row["schema_version"],
-                "structured_output": row["raw_response"],
+                "structured_output": structured_output,
                 "created_at": row["completed_at"] or row["created_at"],
             },
         )
