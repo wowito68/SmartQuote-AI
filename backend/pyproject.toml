@@ -52,6 +52,7 @@ select = ["E", "F", "I", "UP", "B", "SIM"]
 "app/infrastructure/extraction/quote_document_extractor.py" = ["E501"]
 "tests/fixtures/quote_files.py" = ["E501"]
 "tests/integration/test_quote_formats_iteration12.py" = ["I001"]
+"tests/integration/test_quote_iteration12.py" = ["I001"]
 "tests/integration/test_rfq_pipeline.py" = ["I001"]
 "tests/unit/application/test_quote_document_iteration12.py" = ["I001"]
 
