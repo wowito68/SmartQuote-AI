@@ -68,7 +68,7 @@ jobs:
           uv run alembic downgrade base
           uv run alembic upgrade head
           uv run alembic current
-      - name: Quote analysis unit and integration tests
+      - name: Quote analysis unit tests
         run: >-
           uv run pytest
           tests/unit/domain/test_quote_domain.py
@@ -76,10 +76,14 @@ jobs:
           tests/unit/application/test_quote_ai_contract_iteration12.py
           tests/unit/application/test_quote_analysis_iteration13.py
           tests/unit/application/test_quote_matching_iteration12.py
+          -q --junitxml=iteration13-unit-junit.xml
+      - name: Quote analysis integration tests
+        run: >-
+          uv run pytest
           tests/integration/test_quote_iteration12.py
           tests/integration/test_quote_formats_iteration12.py
           tests/integration/test_quote_comparison_pipeline.py
-          -q --junitxml=iteration13-junit.xml
+          -q --junitxml=iteration13-integration-junit.xml
       - name: Validate Iteration 13 API contract
         run: |
           uv run python - <<'PY'
@@ -100,7 +104,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: iteration13-junit-${{ github.sha }}
-          path: backend/iteration13-junit.xml
+          path: backend/iteration13-*-junit.xml
           if-no-files-found: warn
           retention-days: 14
 
