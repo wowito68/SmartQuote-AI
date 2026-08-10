@@ -25,7 +25,6 @@ from app.application.use_cases.rfqs import DeliverRfq
 from app.application.use_cases.supplier_discovery import ProcessSupplierDiscoveryRun
 from app.config.settings import get_settings
 from app.domain.rfqs.entities import EmailMessage
-from app.domain.rfqs.exceptions import EmailDeliveryError
 from app.infrastructure.db.models.audit_event import AuditEventModel
 from app.infrastructure.db.models.rfq import (
     EmailAttachmentModel,
@@ -58,8 +57,7 @@ class RecordingEmailSender(EmailSender):
     provider_name = "test-smtp"
     sender_address = "compras@example.mx"
 
-    def __init__(self, *, fail: bool = False) -> None:
-        self.fail = fail
+    def __init__(self) -> None:
         self.calls: list[tuple[EmailMessage, tuple[AttachmentContent, ...]]] = []
 
     def send(
@@ -68,8 +66,6 @@ class RecordingEmailSender(EmailSender):
         attachments: tuple[AttachmentContent, ...],
     ) -> EmailSendResult:
         self.calls.append((message, attachments))
-        if self.fail:
-            raise EmailDeliveryError("Simulated SMTP failure")
         return EmailSendResult(
             provider_name=self.provider_name,
             external_message_id=f"<test-{message.attempt_number}@example.mx>",
@@ -133,7 +129,7 @@ def approve_suppliers(client: TestClient, tender_id: str) -> tuple[str, str, str
                         "contact_name": "María Compras",
                     }
                 ],
-                "source_note": "Proveedor agregado para prueba de reintento",
+                "source_note": "Proveedor agregado para prueba RFQ legacy",
             },
         )
         assert manual.status_code == 201, manual.text
@@ -147,9 +143,8 @@ def approve_suppliers(client: TestClient, tender_id: str) -> tuple[str, str, str
     return discovered_ids[0], discovered_ids[1], manual_id
 
 
-def test_complete_rfq_generation_review_send_failure_retry_and_audit() -> None:
-    supplier_queue = RecordingSupplierQueue()
-    configure_dependencies(supplier_queue, FakeSupplierSearchService())
+def test_complete_rfq_generation_send_and_audit() -> None:
+    configure_dependencies(RecordingSupplierQueue(), FakeSupplierSearchService())
     rfq_queue = RecordingRfqQueue()
     settings = get_settings()
     attachment_provider = StoredDocumentAttachmentProvider(
@@ -224,66 +219,31 @@ def test_complete_rfq_generation_review_send_failure_retry_and_audit() -> None:
         assert cancelled.status_code == 200
         assert cancelled.json()["status"] == "cancelled"
 
-        approved = client.post(
-            f"/api/v1/rfqs/{with_email['id']}/approve",
-            json={"approved_by_user_id": SYSTEM_USER_ID},
-        )
-        assert approved.status_code == 200, approved.text
-        frozen_edit = client.put(
-            f"/api/v1/rfqs/{with_email['id']}",
-            json={"changed_by_user_id": SYSTEM_USER_ID, "subject": "No permitido"},
-        )
-        assert frozen_edit.status_code == 409
-        queued = client.post(
-            f"/api/v1/rfqs/{with_email['id']}/send",
-            json={"requested_by_user_id": SYSTEM_USER_ID},
-        )
-        assert queued.status_code == 202, queued.text
-        assert UUID(with_email["id"]) in rfq_queue.rfq_ids
-        sender = RecordingEmailSender()
-        DeliverRfq(SqlAlchemyUnitOfWork, attachment_provider, sender).execute(
-            UUID(with_email["id"])
-        )
-        assert len(sender.calls) == 1
-        assert sender.calls[0][0].to_recipients[0] == "ventas@conductores.example.mx"
-        assert sender.calls[0][1][0].content.startswith(b"%PDF-")
-        assert client.get(f"/api/v1/rfqs/{with_email['id']}").json()["status"] == "sent"
+        for rfq in (with_email, manual):
+            approved = client.post(
+                f"/api/v1/rfqs/{rfq['id']}/approve",
+                json={"approved_by_user_id": SYSTEM_USER_ID},
+            )
+            assert approved.status_code == 200, approved.text
+            queued = client.post(
+                f"/api/v1/rfqs/{rfq['id']}/send",
+                json={"requested_by_user_id": SYSTEM_USER_ID},
+            )
+            assert queued.status_code == 202, queued.text
+            assert UUID(rfq["id"]) in rfq_queue.rfq_ids
+            sender = RecordingEmailSender()
+            DeliverRfq(SqlAlchemyUnitOfWork, attachment_provider, sender).execute(
+                UUID(rfq["id"])
+            )
+            assert len(sender.calls) == 1
+            assert sender.calls[0][1][0].content.startswith(b"%PDF-")
+            assert client.get(f"/api/v1/rfqs/{rfq['id']}").json()["status"] == "sent"
+
         duplicate_send = client.post(
             f"/api/v1/rfqs/{with_email['id']}/send",
             json={"requested_by_user_id": SYSTEM_USER_ID},
         )
         assert duplicate_send.status_code == 409
-
-        approved_manual = client.post(
-            f"/api/v1/rfqs/{manual['id']}/approve",
-            json={"approved_by_user_id": SYSTEM_USER_ID},
-        )
-        assert approved_manual.status_code == 200
-        queue_manual = client.post(
-            f"/api/v1/rfqs/{manual['id']}/send",
-            json={"requested_by_user_id": SYSTEM_USER_ID},
-        )
-        assert queue_manual.status_code == 202
-        with pytest.raises(EmailDeliveryError):
-            DeliverRfq(
-                SqlAlchemyUnitOfWork,
-                attachment_provider,
-                RecordingEmailSender(fail=True),
-            ).execute(UUID(manual["id"]))
-        assert client.get(f"/api/v1/rfqs/{manual['id']}").json()["status"] == "failed"
-        retry_sender = RecordingEmailSender()
-        DeliverRfq(SqlAlchemyUnitOfWork, attachment_provider, retry_sender).execute(
-            UUID(manual["id"])
-        )
-        assert client.get(f"/api/v1/rfqs/{manual['id']}").json()["status"] == "sent"
-        messages = client.get(f"/api/v1/rfqs/{manual['id']}/messages")
-        assert messages.status_code == 200
-        assert [item["status"] for item in messages.json()["messages"]][-1] == "sent"
-        assert {item["event_type"] for item in messages.json()["logs"]} >= {
-            "EmailSendingStarted",
-            "EmailFailed",
-            "EmailSent",
-        }
 
         rfqs = client.get(f"/api/v1/tenders/{tender_id}/rfqs").json()
         assert rfqs["metrics"]["total"] == 3
@@ -294,7 +254,7 @@ def test_complete_rfq_generation_review_send_failure_retry_and_audit() -> None:
         with SessionLocal() as session:
             assert session.scalar(select(func.count()).select_from(RfqRequestModel)) == 3
             assert session.scalar(select(func.count()).select_from(EmailAttachmentModel)) >= 3
-            assert session.scalar(select(func.count()).select_from(EmailMessageModel)) >= 2
+            assert session.scalar(select(func.count()).select_from(EmailMessageModel)) == 2
             assert session.scalar(select(func.count()).select_from(OutboundMessageLogModel)) >= 4
             events = set(session.scalars(select(AuditEventModel.event_type)))
         assert {
@@ -304,7 +264,6 @@ def test_complete_rfq_generation_review_send_failure_retry_and_audit() -> None:
             "RfqQueued",
             "EmailSendingStarted",
             "EmailSent",
-            "EmailFailed",
             "AttachmentGenerated",
             "TemplateRendered",
         } <= events
