@@ -1,0 +1,122 @@
+name: Iteration 13 quote AI analysis
+
+on:
+  push:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  quote-analysis-backend:
+    name: Quote AI analysis backend
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: smartquote
+          POSTGRES_PASSWORD: smartquote
+          POSTGRES_DB: smartquote
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U smartquote -d smartquote"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      SMARTQUOTE_DATABASE_URL: postgresql+psycopg://smartquote:smartquote@localhost:5432/smartquote
+      SMARTQUOTE_STORAGE_ROOT: /tmp/smartquote-iteration13-storage
+      SMARTQUOTE_CELERY_BROKER_URL: memory://
+      SMARTQUOTE_CELERY_RESULT_BACKEND: cache+memory://
+      SMARTQUOTE_CELERY_TASK_ALWAYS_EAGER: "true"
+      SMARTQUOTE_EMAIL_MODE: simulation
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+          enable-cache: true
+      - run: uv sync --frozen
+      - name: Ruff quote analysis
+        run: >-
+          uv run ruff check
+          app/domain/quotes
+          app/application/dtos/quote_analysis.py
+          app/application/ports/quote_analysis_artifact_repository.py
+          app/application/use_cases/quote_analysis.py
+          app/application/use_cases/tender_workflow.py
+          app/infrastructure/db/models/quote.py
+          app/infrastructure/db/models/quote_analysis.py
+          app/infrastructure/db/repositories/quote_analysis_artifact_repository.py
+          app/infrastructure/tasks/quote_analysis.py
+          app/api/quote_analysis_schemas.py
+          app/api/routes/quote_analysis.py
+          tests/unit/application/test_quote_analysis_iteration13.py
+          tests/integration/test_quote_iteration12.py
+          tests/integration/test_quote_formats_iteration12.py
+          --output-format=github
+      - name: Migration clean cycle
+        run: |
+          uv run alembic upgrade head
+          uv run alembic downgrade base
+          uv run alembic upgrade head
+          uv run alembic current
+      - name: Quote analysis unit and integration tests
+        run: >-
+          uv run pytest
+          tests/unit/domain/test_quote_domain.py
+          tests/unit/domain/test_quote_iteration12.py
+          tests/unit/application/test_quote_ai_contract_iteration12.py
+          tests/unit/application/test_quote_analysis_iteration13.py
+          tests/unit/application/test_quote_matching_iteration12.py
+          tests/integration/test_quote_iteration12.py
+          tests/integration/test_quote_formats_iteration12.py
+          tests/integration/test_quote_comparison_pipeline.py
+          -q --junitxml=iteration13-junit.xml
+      - name: Validate Iteration 13 API contract
+        run: |
+          uv run python - <<'PY'
+          from app.main import app
+          schema = app.openapi()
+          expected = {
+              "/api/v1/quotes/{quote_id}/analyze": {"post"},
+              "/api/v1/quotes/{quote_id}/analysis": {"get"},
+              "/api/v1/quotes/{quote_id}/items": {"get"},
+              "/api/v1/quotes/{quote_id}/reanalyze": {"post"},
+          }
+          for path, methods in expected.items():
+              assert path in schema["paths"], path
+              assert methods <= set(schema["paths"][path]), (path, schema["paths"][path])
+          PY
+      - name: Upload JUnit
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: iteration13-junit-${{ github.sha }}
+          path: backend/iteration13-junit.xml
+          if-no-files-found: warn
+          retention-days: 14
+
+  quote-analysis-frontend:
+    name: Quote AI analysis frontend build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run build
