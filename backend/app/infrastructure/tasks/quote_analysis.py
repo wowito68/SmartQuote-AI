@@ -14,8 +14,7 @@ from app.infrastructure.ai.openai_extraction_service import (
     OpenAIResponsesHTTPClient,
 )
 from app.infrastructure.db.unit_of_work import SqlAlchemyUnitOfWork
-from app.infrastructure.extraction.pdfplumber_text_extractor import PdfPlumberTextExtractor
-from app.infrastructure.extraction.pymupdf_text_extractor import PyMuPDFTextExtractor
+from app.infrastructure.extraction import PdfPlumberExtractor, PyMuPDFExtractor
 from app.infrastructure.prompts.file_prompt_registry import FilePromptRegistry
 from app.infrastructure.storage.local_file_storage import LocalFileStorage
 from app.infrastructure.tasks.celery_app import celery_app
@@ -25,8 +24,8 @@ logger = logging.getLogger(__name__)
 
 def get_text_extractor() -> FallbackDocumentTextExtractor:
     return FallbackDocumentTextExtractor(
-        PyMuPDFTextExtractor(),
-        PdfPlumberTextExtractor(),
+        PyMuPDFExtractor(),
+        PdfPlumberExtractor(),
     )
 
 
