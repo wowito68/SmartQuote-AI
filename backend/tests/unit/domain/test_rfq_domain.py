@@ -77,6 +77,7 @@ def test_rfq_requires_primary_recipient_before_approval_and_allows_failed_retry(
     rfq.start_sending()
     rfq.mark_failed("SMTP timeout")
     assert rfq.status is RfqStatus.FAILED
+    rfq.mark_retry_pending("retry requested")
     rfq.queue(sender)
     assert rfq.status is RfqStatus.QUEUED
 
