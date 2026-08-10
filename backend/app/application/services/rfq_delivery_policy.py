@@ -87,6 +87,7 @@ def validate_rfq_send(uow: UnitOfWork, rfq: RfqRequest, user_id: UUID) -> Valida
         RfqStatus.APPROVED,
         RfqStatus.QUEUED,
         RfqStatus.SENDING,
+        RfqStatus.SENT,
         RfqStatus.FAILED,
         RfqStatus.RETRY_PENDING,
     }:
