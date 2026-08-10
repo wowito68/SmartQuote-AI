@@ -184,6 +184,19 @@ jobs:
           payload = json.loads(Path("coverage.json").read_text())
           percent = float(payload["totals"]["percent_covered"])
           print(f"Total coverage: {percent:.2f}%")
+          files = []
+          for path, data in payload.get("files", {}).items():
+              summary = data.get("summary", {})
+              missing = int(summary.get("missing_lines", 0))
+              statements = int(summary.get("num_statements", 0))
+              covered = float(summary.get("percent_covered", 100.0))
+              if missing:
+                  files.append((missing, statements, covered, path))
+          for missing, statements, covered, path in sorted(files, reverse=True)[:15]:
+              print(
+                  f"::warning file={path},title=Coverage gap::"
+                  f"{missing} missing of {statements} statements; {covered:.2f}% covered"
+              )
           if percent < 90:
               print(
                   f"::error title=Coverage below threshold::"
