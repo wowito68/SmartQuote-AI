@@ -45,12 +45,16 @@ jobs:
           enable-cache: true
       - run: uv sync --frozen
       - run: uv run alembic upgrade head
-      - name: RFQ unit, contract and integration tests
+      - name: RFQ unit and contract tests
         run: >-
           uv run pytest
           tests/unit/domain/test_rfq_domain.py
           tests/unit/domain/test_rfq_iteration11.py
           tests/unit/infrastructure/test_email_sender_contract.py
+          -q
+      - name: RFQ integration tests
+        run: >-
+          uv run pytest
           tests/integration/test_rfq_pipeline.py
           tests/integration/test_rfq_iteration11.py
           -q
