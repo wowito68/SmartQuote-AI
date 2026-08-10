@@ -26,7 +26,7 @@ jobs:
       - name: Install locked dependencies
         run: uv sync --frozen
       - name: Ruff lint
-        run: uv run ruff check .
+        run: uv run ruff check . --output-format=github
       - name: Compile Python sources
         run: uv run python -m compileall app tests alembic
 
