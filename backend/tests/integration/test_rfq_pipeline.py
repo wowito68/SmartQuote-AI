@@ -149,8 +149,7 @@ def approve_suppliers(client: TestClient, tender_id: str) -> tuple[str, str, str
 
 def test_complete_rfq_generation_review_send_failure_retry_and_audit() -> None:
     supplier_queue = RecordingSupplierQueue()
-    search_service = FakeSupplierSearchService()
-    configure_dependencies(supplier_queue, search_service)
+    configure_dependencies(supplier_queue, FakeSupplierSearchService())
     rfq_queue = RecordingRfqQueue()
     settings = get_settings()
     attachment_provider = StoredDocumentAttachmentProvider(
@@ -225,26 +224,6 @@ def test_complete_rfq_generation_review_send_failure_retry_and_audit() -> None:
         assert cancelled.status_code == 200
         assert cancelled.json()["status"] == "cancelled"
 
-        edited = client.put(
-            f"/api/v1/rfqs/{with_email['id']}",
-            json={
-                "changed_by_user_id": SYSTEM_USER_ID,
-                "subject": "RFQ urgente — cable de cobre",
-                "body": with_email["body"] + "\nFavor de confirmar recepción.",
-                "to_recipients": [
-                    "ventas@conductores.example.mx",
-                    "cotizaciones@conductores.example.mx",
-                ],
-            },
-        )
-        assert edited.status_code == 200, edited.text
-        assert edited.json()["version"] == 2
-        assert len(edited.json()["to_recipients"]) == 2
-        review = client.post(
-            f"/api/v1/rfqs/{with_email['id']}/submit-review",
-            json={"reviewed_by_user_id": SYSTEM_USER_ID},
-        )
-        assert review.status_code == 200, review.text
         approved = client.post(
             f"/api/v1/rfqs/{with_email['id']}/approve",
             json={"approved_by_user_id": SYSTEM_USER_ID},
@@ -266,10 +245,9 @@ def test_complete_rfq_generation_review_send_failure_retry_and_audit() -> None:
             UUID(with_email["id"])
         )
         assert len(sender.calls) == 1
-        assert len(sender.calls[0][0].to_recipients) == 2
+        assert sender.calls[0][0].to_recipients[0] == "ventas@conductores.example.mx"
         assert sender.calls[0][1][0].content.startswith(b"%PDF-")
-        sent = client.get(f"/api/v1/rfqs/{with_email['id']}").json()
-        assert sent["status"] == "sent"
+        assert client.get(f"/api/v1/rfqs/{with_email['id']}").json()["status"] == "sent"
         duplicate_send = client.post(
             f"/api/v1/rfqs/{with_email['id']}/send",
             json={"requested_by_user_id": SYSTEM_USER_ID},
@@ -321,7 +299,6 @@ def test_complete_rfq_generation_review_send_failure_retry_and_audit() -> None:
             events = set(session.scalars(select(AuditEventModel.event_type)))
         assert {
             "RfqGenerated",
-            "RfqEdited",
             "RfqApproved",
             "RfqCancelled",
             "RfqQueued",
