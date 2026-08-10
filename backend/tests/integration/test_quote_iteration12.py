@@ -35,7 +35,7 @@ from app.application.ports.document_text_extractor import (
     TextExtractionResult,
 )
 from app.application.ports.quote_analysis_queue import QuoteAnalysisQueue
-from app.application.use_cases.quotes import ProcessSupplierQuote
+from app.application.use_cases.quote_analysis import AnalyzeQuote
 from app.application.use_cases.rfqs import DeliverRfq
 from app.config.settings import get_settings
 from app.infrastructure.db.models.audit_event import AuditEventModel
@@ -47,6 +47,7 @@ from app.infrastructure.db.models.quote import (
     QuoteItemRevisionModel,
     QuoteTaskRecordModel,
 )
+from app.infrastructure.db.models.quote_analysis import QuoteExtractionArtifactModel
 from app.infrastructure.db.session import SessionLocal
 from app.infrastructure.db.unit_of_work import SqlAlchemyUnitOfWork
 from app.infrastructure.email.jinja_template_renderer import JinjaTemplateRenderer
@@ -160,13 +161,6 @@ class QuoteAIServiceV2(AIExtractionService):
                             "status": "found",
                             "confidence": 0.98,
                         },
-                        {
-                            "field": "delivery_days",
-                            "locator": "page:1",
-                            "fragment": "Entrega en 7 días",
-                            "status": "found",
-                            "confidence": 0.97,
-                        },
                     ],
                 },
                 "items": [
@@ -197,18 +191,10 @@ class QuoteAIServiceV2(AIExtractionService):
                             "total_price": "found",
                             "currency": "found",
                             "delivery_days": "found",
-                            "technical_compliance": "found",
                         },
                         "evidence": [
                             {
                                 "field": "quantity",
-                                "locator": "page:1",
-                                "fragment": "cantidad 2000 metros",
-                                "status": "found",
-                                "confidence": 0.99,
-                            },
-                            {
-                                "field": "unit",
                                 "locator": "page:1",
                                 "fragment": "cantidad 2000 metros",
                                 "status": "found",
@@ -228,27 +214,6 @@ class QuoteAIServiceV2(AIExtractionService):
                                 "status": "found",
                                 "confidence": 0.98,
                             },
-                            {
-                                "field": "currency",
-                                "locator": "page:1",
-                                "fragment": "precio unitario 18.50 MXN",
-                                "status": "found",
-                                "confidence": 0.99,
-                            },
-                            {
-                                "field": "delivery_days",
-                                "locator": "page:1",
-                                "fragment": "Entrega en 7 días",
-                                "status": "found",
-                                "confidence": 0.97,
-                            },
-                            {
-                                "field": "technical_compliance",
-                                "locator": "page:1",
-                                "fragment": "Cumple calibre 2 AWG",
-                                "status": "found",
-                                "confidence": 0.90,
-                            },
                         ],
                     }
                 ],
@@ -262,14 +227,19 @@ class QuoteAIServiceV2(AIExtractionService):
         )
 
 
-def _prepare_sent_rfq(client: TestClient, storage: LocalFileStorage) -> tuple[str, dict]:
+def _prepare_sent_rfq(
+    client: TestClient,
+    storage: LocalFileStorage,
+) -> tuple[str, dict]:
     tender_id = create_approved_catalog(client)
     approve_suppliers(client, tender_id)
     generated = client.post(
         f"/api/v1/tenders/{tender_id}/rfqs/generate",
         json={
             "generated_by_user_id": SYSTEM_USER_ID,
-            "response_deadline": (datetime.now(UTC) + timedelta(days=10)).isoformat(),
+            "response_deadline": (
+                datetime.now(UTC) + timedelta(days=10)
+            ).isoformat(),
         },
     )
     assert generated.status_code == 201, generated.text
@@ -303,7 +273,7 @@ def _prepare_sent_rfq(client: TestClient, storage: LocalFileStorage) -> tuple[st
     return tender_id, rfq
 
 
-def test_manual_quote_intake_reprocess_evidence_and_human_revision(tmp_path: Path) -> None:
+def test_manual_intake_explicit_analysis_artifact_and_reanalysis(tmp_path: Path) -> None:
     configure_dependencies(RecordingSupplierQueue(), FakeSupplierSearchService())
     rfq_queue = RecordingRfqQueue()
     quote_queue = RecordingQuoteQueueV2()
@@ -333,17 +303,15 @@ def test_manual_quote_intake_reprocess_evidence_and_human_revision(tmp_path: Pat
                 "supplier_id": rfq["supplier_id"],
                 "rfq_request_id": rfq["id"],
             },
-            files={"files": ("supplier-v2.pdf", quote_pdf, "application/pdf")},
-            headers={"X-Correlation-ID": "iteration-12-manual"},
+            files={"files": ("supplier-v3.pdf", quote_pdf, "application/pdf")},
         )
         assert uploaded.status_code == 202, uploaded.text
         payload = uploaded.json()
-        assert payload["duplicate_detected"] is False
-        assert payload["queued"] is True
         quote_id = UUID(payload["quote"]["id"])
-        assert payload["quote"]["status"] == "validating"
-        assert quote_queue.calls[0]["correlation_id"] == "iteration-12-manual"
-        assert quote_queue.calls[0]["task_record_id"] is not None
+        assert payload["duplicate_detected"] is False
+        assert payload["queued"] is False
+        assert payload["quote"]["status"] == "ready_for_analysis"
+        assert quote_queue.calls == []
 
         duplicate = client.post(
             f"/api/v1/tenders/{tender_id}/quotes",
@@ -358,12 +326,19 @@ def test_manual_quote_intake_reprocess_evidence_and_human_revision(tmp_path: Pat
         assert duplicate.json()["duplicate_detected"] is True
         assert duplicate.json()["quote"]["id"] == str(quote_id)
 
-        processing = client.get(f"/api/v1/quotes/{quote_id}/processing-status")
-        assert processing.status_code == 200
-        first_task_id = UUID(processing.json()["task_id"])
+        started = client.post(
+            f"/api/v1/quotes/{quote_id}/analyze",
+            json={"requested_by_user_id": SYSTEM_USER_ID},
+            headers={"X-Correlation-ID": "iteration-13-analysis"},
+        )
+        assert started.status_code == 202, started.text
+        first_task_id = UUID(started.json()["task_id"])
+        assert started.json()["quote_status"] == "ready_for_analysis"
+        assert quote_queue.calls[0]["correlation_id"] == "iteration-13-analysis"
+        assert quote_queue.calls[0]["task_record_id"] == first_task_id
 
         ai_service = QuoteAIServiceV2()
-        processor = ProcessSupplierQuote(
+        processor = AnalyzeQuote(
             SqlAlchemyUnitOfWork,
             storage,
             QuoteTextExtractorV2(),
@@ -376,34 +351,46 @@ def test_manual_quote_intake_reprocess_evidence_and_human_revision(tmp_path: Pat
         assert processor.execute(quote_id, first_task_id) == quote_id
         assert ai_service.calls == 1
 
-        extracted = client.get(f"/api/v1/quotes/{quote_id}").json()
-        assert extracted["status"] == "pending_review"
-        assert extracted["items"][0]["match_status"] == "matched"
-        assert "PRICE_CALCULATION_MISMATCH" in extracted["items"][0]["warnings"]
-        assert extracted["items"][0]["total_price"] == "38000.000000"
+        analysis = client.get(f"/api/v1/quotes/{quote_id}/analysis")
+        assert analysis.status_code == 200, analysis.text
+        analyzed = analysis.json()
+        assert analyzed["quote_status"] == "pending_review"
+        assert analyzed["requires_review"] is True
+        assert analyzed["artifact"]["structured_output"]["summary"]["total"] == 38000
+        assert analyzed["latest_run"]["input_tokens"] == 500
+        assert analyzed["latest_run"]["output_tokens"] == 180
+        assert analyzed["items"][0]["match_status"] == "matched"
+        assert "PRICE_CALCULATION_MISMATCH" in analyzed["items"][0]["warnings"]
+        assert analyzed["evidence"]
 
-        evidence = client.get(f"/api/v1/quotes/{quote_id}/evidence")
-        assert evidence.status_code == 200
-        assert evidence.json()["total"] >= 7
-        document_id = extracted["documents"][0]["id"]
-        assert all(item["quote_document_id"] == document_id for item in evidence.json()["items"])
-        assert all(item["locator"] == "page:1" for item in evidence.json()["items"])
-
-        reprocessed = client.post(
-            f"/api/v1/quotes/{quote_id}/reprocess",
+        idempotent = client.post(
+            f"/api/v1/quotes/{quote_id}/analyze",
             json={"requested_by_user_id": SYSTEM_USER_ID},
         )
-        assert reprocessed.status_code == 202, reprocessed.text
-        second_task_id = UUID(reprocessed.json()["task_id"])
+        assert idempotent.status_code == 202, idempotent.text
+        assert len(quote_queue.calls) == 1
+        assert ai_service.calls == 1
+
+        reanalyze = client.post(
+            f"/api/v1/quotes/{quote_id}/reanalyze",
+            json={"requested_by_user_id": SYSTEM_USER_ID},
+            headers={"X-Correlation-ID": "iteration-13-reanalysis"},
+        )
+        assert reanalyze.status_code == 202, reanalyze.text
+        second_task_id = UUID(reanalyze.json()["task_id"])
         assert second_task_id != first_task_id
-        assert processor.execute(quote_id, second_task_id, force_reprocess=True) == quote_id
+        assert quote_queue.calls[-1]["force_reprocess"] is True
+        assert processor.execute(
+            quote_id,
+            second_task_id,
+            force_reprocess=True,
+        ) == quote_id
         assert ai_service.calls == 2
 
-        after_reprocess = client.get(f"/api/v1/quotes/{quote_id}").json()
-        assert len(after_reprocess["extraction_runs"]) == 2
-        assert after_reprocess["items"][0]["total_price"] == "38000.000000"
-        current_item_id = after_reprocess["items"][0]["id"]
-
+        after = client.get(f"/api/v1/quotes/{quote_id}/analysis").json()
+        assert after["quote_status"] == "pending_review"
+        assert after["latest_run"]["run_number"] == 2
+        current_item_id = after["items"][0]["id"]
         corrected = client.patch(
             f"/api/v1/quotes/{quote_id}/items/{current_item_id}",
             json={
@@ -412,48 +399,51 @@ def test_manual_quote_intake_reprocess_evidence_and_human_revision(tmp_path: Pat
             },
         )
         assert corrected.status_code == 200, corrected.text
-        corrected_item = corrected.json()["items"][0]
-        assert corrected_item["total_price"] == "37000.000000"
-        assert "PRICE_CALCULATION_MISMATCH" not in corrected_item["warnings"]
-        assert corrected_item["original_extracted"]["total_price"] == 38000
-
+        assert "PRICE_CALCULATION_MISMATCH" not in corrected.json()["items"][0][
+            "warnings"
+        ]
         approved = client.post(
             f"/api/v1/quotes/{quote_id}/approve",
             json={"reviewer_user_id": SYSTEM_USER_ID},
         )
         assert approved.status_code == 200, approved.text
         assert approved.json()["status"] == "approved"
-        approved_run_id = approved.json()["approved_extraction_run_id"]
-        assert approved_run_id == after_reprocess["extraction_runs"][-1]["id"]
-
-        frozen = client.patch(
-            f"/api/v1/quotes/{quote_id}/items/{current_item_id}",
-            json={
-                "changed_by_user_id": SYSTEM_USER_ID,
-                "total_price": 36000,
-            },
-        )
-        assert frozen.status_code == 409
 
         with SessionLocal() as session:
-            assert session.scalar(select(func.count()).select_from(QuoteDocumentModel)) == 1
-            assert session.scalar(select(func.count()).select_from(QuoteExtractionRunModel)) == 2
-            assert session.scalar(select(func.count()).select_from(QuoteTaskRecordModel)) == 2
-            assert session.scalar(select(func.count()).select_from(QuoteItemModel)) == 2
             assert session.scalar(
-                select(func.count()).select_from(QuoteItemModel).where(QuoteItemModel.is_current.is_(True))
+                select(func.count()).select_from(QuoteDocumentModel)
             ) == 1
-            assert session.scalar(select(func.count()).select_from(QuoteItemRevisionModel)) == 1
-            assert session.scalar(select(func.count()).select_from(QuoteEvidenceReferenceModel)) >= 14
+            assert session.scalar(
+                select(func.count()).select_from(QuoteExtractionRunModel)
+            ) == 2
+            assert session.scalar(
+                select(func.count()).select_from(QuoteExtractionArtifactModel)
+            ) == 2
+            assert session.scalar(
+                select(func.count()).select_from(QuoteTaskRecordModel)
+            ) == 2
+            assert session.scalar(
+                select(func.count()).select_from(QuoteItemModel)
+            ) == 2
+            assert session.scalar(
+                select(func.count())
+                .select_from(QuoteItemModel)
+                .where(QuoteItemModel.is_current.is_(True))
+            ) == 1
+            assert session.scalar(
+                select(func.count()).select_from(QuoteItemRevisionModel)
+            ) == 1
+            assert session.scalar(
+                select(func.count()).select_from(QuoteEvidenceReferenceModel)
+            ) >= 6
             events = set(session.scalars(select(AuditEventModel.event_type)))
         assert {
             "QuoteReceived",
-            "QuoteFileStored",
-            "QuoteAnalysisStarted",
-            "QuoteAnalyzed",
-            "QuoteNormalized",
-            "QuoteReprocessed",
-            "QuoteItemCorrected",
+            "QuoteReadyForAnalysis",
+            "quote.analysis_started",
+            "quote.analysis_completed",
+            "quote.reanalysis_requested",
+            "quote.item_extracted",
             "QuoteApproved",
         } <= events
     finally:

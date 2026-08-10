@@ -10,14 +10,14 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.config.settings import get_settings
 
-SQLITE_DB_PATH = Path("/tmp/smartquote_iteration12_test.db")
+SQLITE_DB_PATH = Path("/tmp/smartquote_iteration13_test.db")
 DEFAULT_TEST_DATABASE_URL = f"sqlite+pysqlite:///{SQLITE_DB_PATH}"
 TEST_DATABASE_URL = os.environ.get("SMARTQUOTE_DATABASE_URL", DEFAULT_TEST_DATABASE_URL)
 USING_SQLITE = TEST_DATABASE_URL.startswith("sqlite")
 
 os.environ.setdefault("SMARTQUOTE_DATABASE_URL", TEST_DATABASE_URL)
 os.environ["SMARTQUOTE_ENVIRONMENT"] = "test"
-os.environ.setdefault("SMARTQUOTE_STORAGE_ROOT", "/tmp/smartquote_iteration12_storage")
+os.environ.setdefault("SMARTQUOTE_STORAGE_ROOT", "/tmp/smartquote_iteration13_storage")
 os.environ.setdefault("SMARTQUOTE_CELERY_BROKER_URL", "memory://")
 os.environ.setdefault("SMARTQUOTE_CELERY_RESULT_BACKEND", "cache+memory://")
 os.environ.setdefault("SMARTQUOTE_CELERY_TASK_ALWAYS_EAGER", "true")
@@ -80,6 +80,7 @@ def clean_database_after_test(db_engine: Engine) -> Generator[None]:
         connection.execute(text("DELETE FROM quote_item_revisions"))
         connection.execute(text("DELETE FROM quote_items"))
         connection.execute(text("DELETE FROM quote_evidence_references"))
+        connection.execute(text("DELETE FROM quote_extraction_artifacts"))
         connection.execute(text("DELETE FROM quote_extraction_runs"))
         connection.execute(text("DELETE FROM quote_task_records"))
         connection.execute(text("DELETE FROM quote_documents"))

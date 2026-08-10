@@ -55,6 +55,14 @@ export type QuoteExtractionRun = {
   created_at: string;
 };
 
+export type ExtractionArtifact = {
+  id: UUID;
+  extraction_run_id: UUID;
+  schema_version: string;
+  structured_output: Record<string, unknown>;
+  created_at: string;
+};
+
 export type QuoteItem = {
   id: UUID;
   catalog_product_id: UUID | null;
@@ -115,6 +123,30 @@ export type Quote = {
   extraction_runs: QuoteExtractionRun[];
   created_at: string;
   updated_at: string;
+};
+
+export type QuoteProcessingStatus = {
+  quote_id: UUID;
+  quote_status: string;
+  task_id: UUID | null;
+  task_status: string | null;
+  correlation_id: string | null;
+  attempt_count: number;
+  extraction_run_id: UUID | null;
+  extraction_status: string | null;
+  last_error: string | null;
+};
+
+export type QuoteAnalysis = {
+  quote_id: UUID;
+  quote_status: string;
+  processing: QuoteProcessingStatus;
+  latest_run: QuoteExtractionRun | null;
+  artifact: ExtractionArtifact | null;
+  items: QuoteItem[];
+  evidence: QuoteEvidence[];
+  requires_review: boolean;
+  last_error: string | null;
 };
 
 export type TenderQuotes = { items: Quote[]; total: number };

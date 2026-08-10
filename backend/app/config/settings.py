@@ -11,7 +11,7 @@ EmailMode = Literal["simulation", "smtp"]
 
 class Settings(BaseSettings):
     project_name: str = Field(default="SmartQuote AI")
-    version: str = Field(default="0.8.0")
+    version: str = Field(default="0.9.0")
     environment: Environment = Field(default="local")
     api_v1_prefix: str = Field(default="/api/v1")
     database_url: SecretStr
@@ -50,7 +50,9 @@ class Settings(BaseSettings):
     ai_output_cost_per_million_tokens: float = Field(default=0.0, ge=0)
     comparison_scoring_config_version: str = Field(default="mvp-1")
 
-    supplier_directory_path: Path = Field(default=Path("app/supplier_sources/default_directory.json"))
+    supplier_directory_path: Path = Field(
+        default=Path("app/supplier_sources/default_directory.json")
+    )
     supplier_search_country: str | None = Field(default="MX")
     supplier_search_city: str | None = Field(default=None)
     supplier_search_query_version: str = Field(default="1.0.0")

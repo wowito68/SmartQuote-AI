@@ -1,6 +1,12 @@
 import { ApiError } from "../../lib/api";
 import type { UUID } from "../../lib/types";
-import type { Quote, QuoteEvidence, TenderQuotes } from "./types";
+import type {
+  Quote,
+  QuoteAnalysis,
+  QuoteEvidence,
+  QuoteProcessingStatus,
+  TenderQuotes
+} from "./types";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "";
 
@@ -22,9 +28,16 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 }
 
 export const quoteApi = {
-  list: (tenderId: UUID) => request<TenderQuotes>(`/api/v1/tenders/${tenderId}/quotes`),
+  list: (tenderId: UUID) =>
+    request<TenderQuotes>(`/api/v1/tenders/${tenderId}/quotes`),
 
-  upload: (tenderId: UUID, userId: UUID, supplierId: UUID, rfqId: UUID | null, file: File) => {
+  upload: (
+    tenderId: UUID,
+    userId: UUID,
+    supplierId: UUID,
+    rfqId: UUID | null,
+    file: File
+  ) => {
     const form = new FormData();
     form.append("uploaded_by_user_id", userId);
     form.append("supplier_id", supplierId);
@@ -39,16 +52,33 @@ export const quoteApi = {
   get: (quoteId: UUID) => request<Quote>(`/api/v1/quotes/${quoteId}`),
 
   evidence: (quoteId: UUID) =>
-    request<{ items: QuoteEvidence[]; total: number }>(`/api/v1/quotes/${quoteId}/evidence`),
+    request<{ items: QuoteEvidence[]; total: number }>(
+      `/api/v1/quotes/${quoteId}/evidence`
+    ),
+
+  analyze: (quoteId: UUID, userId: UUID) =>
+    request<QuoteProcessingStatus>(`/api/v1/quotes/${quoteId}/analyze`, {
+      method: "POST",
+      body: JSON.stringify({ requested_by_user_id: userId })
+    }),
+
+  analysis: (quoteId: UUID) =>
+    request<QuoteAnalysis>(`/api/v1/quotes/${quoteId}/analysis`),
+
+  reanalyze: (quoteId: UUID, userId: UUID) =>
+    request<QuoteProcessingStatus>(`/api/v1/quotes/${quoteId}/reanalyze`, {
+      method: "POST",
+      body: JSON.stringify({ requested_by_user_id: userId })
+    }),
 
   process: (quoteId: UUID, userId: UUID) =>
-    request(`/api/v1/quotes/${quoteId}/process`, {
+    request<QuoteProcessingStatus>(`/api/v1/quotes/${quoteId}/process`, {
       method: "POST",
       body: JSON.stringify({ requested_by_user_id: userId })
     }),
 
   reprocess: (quoteId: UUID, userId: UUID) =>
-    request(`/api/v1/quotes/${quoteId}/reprocess`, {
+    request<QuoteProcessingStatus>(`/api/v1/quotes/${quoteId}/reprocess`, {
       method: "POST",
       body: JSON.stringify({ requested_by_user_id: userId })
     }),

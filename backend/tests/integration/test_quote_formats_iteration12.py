@@ -17,7 +17,7 @@ from app.application.ports.ai_extraction_service import (
     AIExtractionResult,
     AIExtractionService,
 )
-from app.application.use_cases.quotes import ProcessSupplierQuote
+from app.application.use_cases.quote_analysis import AnalyzeQuote
 from app.config.settings import get_settings
 from app.infrastructure.db.unit_of_work import SqlAlchemyUnitOfWork
 from app.infrastructure.email.jinja_template_renderer import JinjaTemplateRenderer
@@ -104,7 +104,6 @@ class OfficeQuoteAI(AIExtractionService):
                             "total_price": "found",
                             "currency": "found",
                             "delivery_days": "not_found",
-                            "technical_compliance": "not_found",
                         },
                         "evidence": [
                             {
@@ -144,7 +143,7 @@ class OfficeQuoteAI(AIExtractionService):
         ),
     ],
 )
-def test_office_quote_upload_and_processing(
+def test_existing_office_reader_remains_compatible_with_explicit_analysis(
     tmp_path: Path,
     filename: str,
     mime_type: str,
@@ -182,14 +181,17 @@ def test_office_quote_upload_and_processing(
             files={"files": (filename, content, mime_type)},
         )
         assert uploaded.status_code == 202, uploaded.text
+        assert uploaded.json()["queued"] is False
         quote_id = UUID(uploaded.json()["quote"]["id"])
-        task_id = UUID(
-            client.get(f"/api/v1/quotes/{quote_id}/processing-status").json()[
-                "task_id"
-            ]
-        )
 
-        ProcessSupplierQuote(
+        queued = client.post(
+            f"/api/v1/quotes/{quote_id}/analyze",
+            json={"requested_by_user_id": SYSTEM_USER_ID},
+        )
+        assert queued.status_code == 202, queued.text
+        task_id = UUID(queued.json()["task_id"])
+
+        AnalyzeQuote(
             SqlAlchemyUnitOfWork,
             storage,
             QuoteTextExtractorV2(),
@@ -200,11 +202,12 @@ def test_office_quote_upload_and_processing(
             temperature=0,
         ).execute(quote_id, task_id)
 
-        quote = client.get(f"/api/v1/quotes/{quote_id}").json()
-        evidence = client.get(f"/api/v1/quotes/{quote_id}/evidence").json()["items"]
-        assert quote["status"] == "pending_review"
-        assert quote["documents"][0]["processing_status"] == "processed"
-        assert quote["documents"][0]["document_type"] == filename.rsplit(".", 1)[1]
+        analysis = client.get(f"/api/v1/quotes/{quote_id}/analysis")
+        assert analysis.status_code == 200, analysis.text
+        payload = analysis.json()
+        assert payload["quote_status"] == "pending_review"
+        assert payload["artifact"] is not None
+        evidence = payload["evidence"]
         assert evidence
         assert any(item["locator"].startswith(locator_prefix) for item in evidence)
     finally:
