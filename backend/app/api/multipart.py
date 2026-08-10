@@ -5,7 +5,11 @@ from uuid import UUID
 from fastapi import Request
 
 from app.application.dtos.document import UploadDocumentFile
-from app.domain.documents.exceptions import DocumentTooLarge, InvalidDocumentFile
+from app.domain.documents.exceptions import (
+    DocumentTooLarge,
+    InvalidDocumentFile,
+    TooManyDocuments,
+)
 
 MULTIPART_OVERHEAD_ALLOWANCE = 1024 * 1024
 
@@ -43,7 +47,7 @@ async def parse_multipart_upload(
             fields[str(field_name)] = payload.decode(charset).strip()
         elif field_name == "files":
             if len(files) >= maximum_files:
-                raise InvalidDocumentFile("Too many files were provided in the upload.")
+                raise TooManyDocuments("Too many files were provided in the upload.")
             files.append(
                 UploadDocumentFile(
                     original_file_name=part.get_filename() or "",
