@@ -1,6 +1,5 @@
 import hashlib
 import urllib.error
-from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 from app.application.dtos.quote_analysis import (
@@ -48,7 +47,6 @@ from app.domain.quotes.value_objects import (
     ProductMatchStatus,
     QuoteExtractionRunStatus,
     QuoteStatus,
-    QuoteTaskStatus,
     QuoteWarning,
 )
 from app.domain.shared.exceptions import ValidationError
@@ -62,8 +60,6 @@ def _provider_error_is_retryable(error: BaseException) -> bool:
         if isinstance(current, (urllib.error.URLError, TimeoutError, ConnectionError)):
             return True
         current = current.__cause__
-    # The legacy AI port historically used AIExtractionFailure for provider outages.
-    # Structural response failures have their own AIResponseValidationError type.
     return not isinstance(error, AIResponseValidationError)
 
 
@@ -127,9 +123,7 @@ class QueueQuoteAnalysis:
                             task.succeed()
                             uow.quotes.create_task(task)
                             uow.commit()
-                        return GetQuoteProcessingStatus(self._uow_factory).execute(
-                            quote.id
-                        )
+                        return GetQuoteProcessingStatus(self._uow_factory).execute(quote.id)
 
             if force_reanalysis:
                 restart_analysis(quote)
@@ -173,7 +167,6 @@ class QueueQuoteAnalysis:
                 force_reprocess=force_reanalysis,
             )
         except TypeError:
-            # Compatibility with older queue test doubles.
             self._queue.enqueue(quote_id, correlation)
         except Exception as exc:
             with self._uow_factory() as uow:
@@ -449,8 +442,7 @@ class AnalyzeQuote(ProcessSupplierQuote):
                             (
                                 product
                                 for product in snapshot.products
-                                if str(product.get("product_id"))
-                                == str(match.product_id)
+                                if str(product.get("product_id")) == str(match.product_id)
                             ),
                             None,
                         )
@@ -460,18 +452,13 @@ class AnalyzeQuote(ProcessSupplierQuote):
                             )
                     quoted_specs = {
                         str(key): str(value)
-                        for key, value in (
-                            raw.get("quoted_specifications") or {}
-                        ).items()
+                        for key, value in (raw.get("quoted_specifications") or {}).items()
                     }
                     compliance, compliance_reason = self._compliance.evaluate(
                         requested_specs,
                         quoted_specs,
                     )
-                    if not quoted_specs and isinstance(
-                        raw.get("technical_compliance"),
-                        bool,
-                    ):
+                    if not quoted_specs and isinstance(raw.get("technical_compliance"), bool):
                         compliance = (
                             ComplianceStatus.COMPLIANT
                             if raw["technical_compliance"]
@@ -492,8 +479,7 @@ class AnalyzeQuote(ProcessSupplierQuote):
                         (
                             evidence
                             for evidence in evidences
-                            if evidence.field_name
-                            in {"unit_price", "total_price", "item"}
+                            if evidence.field_name in {"unit_price", "total_price", "item"}
                         ),
                         evidences[0] if evidences else None,
                     )
@@ -532,8 +518,7 @@ class AnalyzeQuote(ProcessSupplierQuote):
                         match_status=match.status,
                         match_score=match.score,
                         match_reason=(
-                            f"{match.reason} Technical evaluation: "
-                            f"{compliance_reason}"
+                            f"{match.reason} Technical evaluation: {compliance_reason}"
                         ),
                         notes=raw.get("notes"),
                         source_evidence_id=primary.id if primary else None,
@@ -674,7 +659,11 @@ class AnalyzeQuote(ProcessSupplierQuote):
                     uow.quotes.update_document(failed_document)
                 retryable = isinstance(
                     exc,
-                    (RetryableQuoteExtractionFailure, QuoteStorageError, QuoteProviderError),
+                    (
+                        RetryableQuoteExtractionFailure,
+                        QuoteStorageError,
+                        QuoteProviderError,
+                    ),
                 )
                 if failed_task is not None:
                     failed_task.fail(exc, retryable=retryable)
