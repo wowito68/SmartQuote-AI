@@ -172,7 +172,25 @@ jobs:
       - run: uv sync --frozen
       - run: uv run alembic upgrade head
       - run: uv run --with coverage coverage run --source=app -m pytest -q
-      - run: uv run --with coverage coverage report --fail-under=90
+      - name: Report coverage
+        run: |
+          uv run --with coverage coverage report
+          uv run --with coverage coverage json -o coverage.json
+      - name: Enforce 90 percent coverage
+        run: |
+          uv run python - <<'PY'
+          import json
+          from pathlib import Path
+          payload = json.loads(Path("coverage.json").read_text())
+          percent = float(payload["totals"]["percent_covered"])
+          print(f"Total coverage: {percent:.2f}%")
+          if percent < 90:
+              print(
+                  f"::error title=Coverage below threshold::"
+                  f"Total coverage {percent:.2f}% is below required 90.00%"
+              )
+              raise SystemExit(1)
+          PY
       - run: uv run --with coverage coverage xml
       - uses: actions/upload-artifact@v4
         with:
