@@ -7,6 +7,7 @@ from app.api.comparison_schemas import (
     ComparisonGenerateRequestSchema,
     ComparisonResponseSchema,
 )
+from app.api.dependencies import get_uow_factory
 from app.api.schemas import ErrorResponseSchema
 from app.application.ports.unit_of_work import UnitOfWorkFactory
 from app.application.services.comparison_builder import ComparisonBuilder
@@ -16,7 +17,6 @@ from app.application.use_cases.comparison import (
     GetTenderComparison,
 )
 from app.config.settings import Settings, get_settings
-from app.api.dependencies import get_uow_factory
 
 router = APIRouter(tags=["comparisons"])
 UowFactoryDependency = Annotated[UnitOfWorkFactory, Depends(get_uow_factory)]
