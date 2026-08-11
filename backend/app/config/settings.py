@@ -11,7 +11,7 @@ EmailMode = Literal["simulation", "smtp"]
 
 class Settings(BaseSettings):
     project_name: str = Field(default="SmartQuote AI")
-    version: str = Field(default="0.9.0")
+    version: str = Field(default="0.10.0")
     environment: Environment = Field(default="local")
     api_v1_prefix: str = Field(default="/api/v1")
     database_url: SecretStr
@@ -48,7 +48,10 @@ class Settings(BaseSettings):
     ai_temperature: float = Field(default=0.0, ge=0, le=2)
     ai_input_cost_per_million_tokens: float = Field(default=0.0, ge=0)
     ai_output_cost_per_million_tokens: float = Field(default=0.0, ge=0)
+    # Legacy Iteration 9 scorer; retained only for backwards compatibility.
     comparison_scoring_config_version: str = Field(default="mvp-1")
+    # Iteration 14 deterministic descriptive comparison contract.
+    comparison_rules_version: str = Field(default="1.0.0")
 
     supplier_directory_path: Path = Field(
         default=Path("app/supplier_sources/default_directory.json")
