@@ -4,7 +4,13 @@ from uuid import uuid4
 
 import pytest
 
-from app.domain.quotes.entities import Quote, QuoteDocument, QuoteExtractionRun, QuoteItem, QuoteTaskRecord
+from app.domain.quotes.entities import (
+    Quote,
+    QuoteDocument,
+    QuoteExtractionRun,
+    QuoteItem,
+    QuoteTaskRecord,
+)
 from app.domain.quotes.exceptions import InvalidQuoteState
 from app.domain.quotes.value_objects import (
     ComplianceStatus,
