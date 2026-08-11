@@ -14,8 +14,8 @@ from app.domain.comparison.value_objects import (
     ComparisonStatus,
     ComparisonWarningCode,
     DeliveryTime,
-    Money,
     MonetaryComparisonStatus,
+    Money,
     NormalizedCompliance,
     OfferStatus,
     Quantity,
@@ -160,7 +160,9 @@ class SqlAlchemyComparisonRepository(ComparisonRepository):
             if item_ids
             else []
         )
-        offers_by_item: dict[UUID, list[ComparisonOffer]] = {item_id: [] for item_id in item_ids}
+        offers_by_item: dict[UUID, list[ComparisonOffer]] = {
+            item_id: [] for item_id in item_ids
+        }
         for offer in offer_models:
             currency = offer.currency
             offers_by_item[offer.comparison_item_id].append(
@@ -188,7 +190,9 @@ class SqlAlchemyComparisonRepository(ComparisonRepository):
                     commercial_terms=offer.commercial_terms,
                     evidence_id=offer.evidence_id,
                     confidence=offer.confidence,
-                    warnings=tuple(_warning_from_dict(value) for value in offer.warnings),
+                    warnings=tuple(
+                        _warning_from_dict(value) for value in offer.warnings
+                    ),
                 )
             )
         items = tuple(
