@@ -1,0 +1,115 @@
+name: Iteration 14 deterministic comparison
+
+on:
+  push:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  comparison-backend:
+    name: Comparison backend
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: smartquote
+          POSTGRES_PASSWORD: smartquote
+          POSTGRES_DB: smartquote
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U smartquote -d smartquote"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      SMARTQUOTE_DATABASE_URL: postgresql+psycopg://smartquote:smartquote@localhost:5432/smartquote
+      SMARTQUOTE_STORAGE_ROOT: /tmp/smartquote-iteration14-storage
+      SMARTQUOTE_CELERY_BROKER_URL: memory://
+      SMARTQUOTE_CELERY_RESULT_BACKEND: cache+memory://
+      SMARTQUOTE_CELERY_TASK_ALWAYS_EAGER: "true"
+      SMARTQUOTE_EMAIL_MODE: simulation
+      SMARTQUOTE_COMPARISON_RULES_VERSION: "1.0.0"
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+          enable-cache: true
+      - run: uv sync --frozen
+      - name: Ruff comparison v2
+        run: >-
+          uv run ruff check
+          app/domain/comparison
+          app/application/dtos/comparison.py
+          app/application/ports/comparison_repository.py
+          app/application/services/comparison_normalization.py
+          app/application/services/comparison_builder.py
+          app/application/use_cases/comparison.py
+          app/infrastructure/db/models/comparison.py
+          app/infrastructure/db/repositories/comparison_repository.py
+          app/api/comparison_schemas.py
+          app/api/routes/comparison.py
+          tests/unit/application/test_comparison_iteration14.py
+          tests/integration/test_comparison_iteration14.py
+          --output-format=github
+      - name: Migration clean cycle
+        run: |
+          uv run alembic upgrade head
+          uv run alembic downgrade base
+          uv run alembic upgrade head
+          uv run alembic current
+      - name: Comparison unit tests
+        run: uv run pytest tests/unit/application/test_comparison_iteration14.py -q --junitxml=iteration14-unit-junit.xml
+      - name: Comparison integration tests
+        run: uv run pytest tests/integration/test_comparison_iteration14.py -q --junitxml=iteration14-integration-junit.xml
+      - name: Validate Iteration 14 API contract
+        run: |
+          uv run python - <<'PY'
+          from app.main import app
+          schema = app.openapi()
+          expected = {
+              "/api/v1/tenders/{tender_id}/comparisons": {"get", "post"},
+              "/api/v1/comparisons/{comparison_id}": {"get"},
+          }
+          for path, methods in expected.items():
+              assert path in schema["paths"], path
+              assert methods <= set(schema["paths"][path]), (path, schema["paths"][path])
+          response = schema["components"]["schemas"]["ComparisonResponseSchema"]
+          properties = response["properties"]
+          assert "recommendation" not in properties
+          assert "score" not in properties
+          PY
+      - name: Upload JUnit
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: iteration14-junit-${{ github.sha }}
+          path: backend/iteration14-*-junit.xml
+          if-no-files-found: warn
+          retention-days: 14
+
+  comparison-frontend:
+    name: Comparison frontend build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run build
