@@ -75,6 +75,7 @@ jobs:
         run: |
           uv run python - <<'PY'
           from app.main import app
+
           schema = app.openapi()
           expected = {
               "/api/v1/tenders/{tender_id}/comparisons": {"get", "post"},
@@ -83,8 +84,12 @@ jobs:
           for path, methods in expected.items():
               assert path in schema["paths"], path
               assert methods <= set(schema["paths"][path]), (path, schema["paths"][path])
-          response = schema["components"]["schemas"]["ComparisonResponseSchema"]
-          properties = response["properties"]
+
+          response_schema = schema["paths"]["/api/v1/tenders/{tender_id}/comparisons"]["post"]["responses"]["201"]["content"]["application/json"]["schema"]
+          ref = response_schema.get("$ref")
+          assert ref and ref.startswith("#/components/schemas/"), response_schema
+          component_name = ref.rsplit("/", 1)[-1]
+          properties = schema["components"]["schemas"][component_name]["properties"]
           assert "recommendation" not in properties
           assert "score" not in properties
           PY
