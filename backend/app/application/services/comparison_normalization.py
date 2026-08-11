@@ -13,7 +13,7 @@ from app.domain.quotes.value_objects import ComplianceStatus
 
 
 class ComparisonNormalizer:
-    """Deterministic normalization for comparison; it never performs FX or unsafe unit conversion."""
+    """Normalize comparison fields without FX or unsafe unit conversion."""
 
     _UNIT_ALIASES = {
         "piece": "piece",
@@ -80,7 +80,9 @@ class ComparisonNormalizer:
     @staticmethod
     def money(amount: Decimal | None, currency: str | None) -> Money:
         normalized_currency = currency.strip().upper() if currency else None
-        if normalized_currency and (len(normalized_currency) != 3 or not normalized_currency.isalpha()):
+        if normalized_currency and (
+            len(normalized_currency) != 3 or not normalized_currency.isalpha()
+        ):
             normalized_currency = None
         return Money(amount, normalized_currency)
 
@@ -111,7 +113,10 @@ class ComparisonNormalizer:
         )
 
     @staticmethod
-    def compare_quantity(requested: Quantity, quoted: Quantity) -> QuantityComparisonStatus:
+    def compare_quantity(
+        requested: Quantity,
+        quoted: Quantity,
+    ) -> QuantityComparisonStatus:
         if requested.value is None or quoted.value is None:
             return QuantityComparisonStatus.UNKNOWN
         if requested.unit is None or quoted.unit is None:
