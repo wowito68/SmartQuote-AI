@@ -32,6 +32,16 @@ def _clean(value: str | None, *, limit: int | None = None) -> str | None:
     return normalized[:limit] if limit else normalized
 
 
+def _currency(value: str | None, field_name: str) -> str | None:
+    normalized = _clean(value)
+    if normalized is None:
+        return None
+    normalized = normalized.upper()
+    if len(normalized) != 3 or not normalized.isalpha():
+        raise ValidationError(f"{field_name} must be a three-letter code.")
+    return normalized
+
+
 def _decimal(value: Decimal | str | float | int | None, field_name: str) -> Decimal | None:
     if value is None:
         return None
@@ -112,9 +122,7 @@ class Quote:
             raise ValidationError("Quote file hash must be a SHA-256 digest.")
         if self.version < 1:
             raise ValidationError("Quote version must be positive.")
-        self.currency = (_clean(self.currency, limit=3) or "").upper() or None
-        if self.currency is not None and (len(self.currency) != 3 or not self.currency.isalpha()):
-            raise ValidationError("Quote currency must be a three-letter code.")
+        self.currency = _currency(self.currency, "Quote currency")
         self.subtotal_amount = _decimal(self.subtotal_amount, "Quote subtotal")
         self.tax_amount = _decimal(self.tax_amount, "Quote tax")
         self.total_amount = _decimal(self.total_amount, "Quote total")
@@ -161,7 +169,7 @@ class Quote:
     ) -> None:
         if self.status is not QuoteStatus.EXTRACTED:
             raise InvalidQuoteState("Quote summary can only be normalized after extraction.")
-        self.currency = (currency.strip().upper() if currency else None)
+        self.currency = _currency(currency, "Quote currency")
         self.subtotal_amount = _decimal(subtotal_amount, "Quote subtotal")
         self.tax_amount = _decimal(tax_amount, "Quote tax")
         self.total_amount = _decimal(total_amount, "Quote total")
@@ -447,9 +455,7 @@ class QuoteItem:
                 raise ValidationError("Quote item quantity must be positive.")
         self.unit_price = _decimal(self.unit_price, "Unit price")
         self.total_price = _decimal(self.total_price, "Total price")
-        self.currency = (_clean(self.currency, limit=3) or "").upper() or None
-        if self.currency is not None and (len(self.currency) != 3 or not self.currency.isalpha()):
-            raise ValidationError("Quote item currency must be a three-letter code.")
+        self.currency = _currency(self.currency, "Quote item currency")
         self.brand = _clean(self.brand, limit=255)
         self.model = _clean(self.model, limit=255)
         self.unit = _clean(self.unit, limit=100)
@@ -549,10 +555,7 @@ class QuoteItem:
         if total_price is not None:
             self.total_price = _decimal(total_price, "Total price")
         if currency is not None:
-            normalized_currency = currency.strip().upper()
-            if len(normalized_currency) != 3 or not normalized_currency.isalpha():
-                raise ValidationError("Quote item currency must be a three-letter code.")
-            self.currency = normalized_currency
+            self.currency = _currency(currency, "Quote item currency")
         if delivery_days is not None:
             if delivery_days < 0:
                 raise ValidationError("Delivery days cannot be negative.")
