@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from decimal import Decimal
 from uuid import UUID
 
 from app.application.services.comparison_normalization import ComparisonNormalizer
@@ -15,6 +14,7 @@ from app.domain.comparison.value_objects import (
     MonetaryComparisonStatus,
     NormalizedCompliance,
     OfferStatus,
+    Quantity,
     QuantityComparisonStatus,
     WarningSeverity,
 )
@@ -36,7 +36,7 @@ class ApprovedQuoteSource:
 
 
 class ComparisonBuilder:
-    """Builds a descriptive, deterministic comparison. It never scores or recommends suppliers."""
+    """Build a deterministic comparison without scores or supplier recommendations."""
 
     def __init__(self, normalizer: ComparisonNormalizer | None = None) -> None:
         self._normalizer = normalizer or ComparisonNormalizer()
@@ -76,12 +76,28 @@ class ComparisonBuilder:
             by_supplier.setdefault(source.supplier_id, []).append(source)
 
         for participant in participants:
-            if not by_supplier.get(participant.supplier_id):
+            sources = by_supplier.get(participant.supplier_id) or []
+            if not sources:
                 global_warnings.append(
                     self._warning(
                         ComparisonWarningCode.SUPPLIER_WITHOUT_VALID_QUOTE,
-                        f"Supplier {participant.supplier_name} does not have an approved quote.",
+                        (
+                            f"Supplier {participant.supplier_name} does not have "
+                            "an approved quote."
+                        ),
                         supplier_id=participant.supplier_id,
+                    )
+                )
+            elif not any(source.items for source in sources):
+                global_warnings.append(
+                    self._warning(
+                        ComparisonWarningCode.INCOMPLETE_QUOTE,
+                        (
+                            f"Supplier {participant.supplier_name} has an approved quote "
+                            "without current quote items."
+                        ),
+                        supplier_id=participant.supplier_id,
+                        quote_id=sources[-1].quote.id,
                     )
                 )
 
@@ -96,11 +112,17 @@ class ComparisonBuilder:
 
         for source in quote_sources:
             for item in source.items:
-                if item.catalog_product_id is None or item.catalog_product_id not in product_payloads:
+                if (
+                    item.catalog_product_id is None
+                    or item.catalog_product_id not in product_payloads
+                ):
                     global_warnings.append(
                         self._warning(
                             ComparisonWarningCode.PRODUCT_UNIDENTIFIED,
-                            "An approved quote item cannot be associated with the approved catalog snapshot.",
+                            (
+                                "An approved quote item cannot be associated with the "
+                                "approved catalog snapshot."
+                            ),
                             severity=WarningSeverity.CRITICAL,
                             supplier_id=source.supplier_id,
                             quote_id=source.quote.id,
@@ -110,7 +132,11 @@ class ComparisonBuilder:
 
         items: list[ComparisonItem] = []
         for product_id, raw_product in product_payloads.items():
-            product_name = str(raw_product.get("name") or raw_product.get("product_name") or product_id)
+            product_name = str(
+                raw_product.get("name")
+                or raw_product.get("product_name")
+                or product_id
+            )
             requested = self._normalizer.quantity(
                 raw_product.get("quantity"),
                 raw_product.get("unit"),
@@ -146,7 +172,10 @@ class ComparisonBuilder:
                     quote_id = sources[-1].quote.id if sources else None
                     warning = self._warning(
                         ComparisonWarningCode.MISSING_PRODUCT_QUOTE,
-                        f"Supplier {participant.supplier_name} did not quote {product_name}.",
+                        (
+                            f"Supplier {participant.supplier_name} did not quote "
+                            f"{product_name}."
+                        ),
                         supplier_id=participant.supplier_id,
                         quote_id=quote_id,
                     )
@@ -164,7 +193,10 @@ class ComparisonBuilder:
                 if len(matches) > 1:
                     duplicate_warning = self._warning(
                         ComparisonWarningCode.DUPLICATE_QUOTE_ITEM,
-                        f"Supplier {participant.supplier_name} has multiple approved quote items for {product_name}.",
+                        (
+                            f"Supplier {participant.supplier_name} has multiple "
+                            f"approved quote items for {product_name}."
+                        ),
                         severity=WarningSeverity.CRITICAL,
                         supplier_id=participant.supplier_id,
                         quote_id=matches[0][0].quote.id,
@@ -194,14 +226,20 @@ class ComparisonBuilder:
                 offer.unit_price.currency or offer.total_price.currency
                 for offer in offers
                 if offer.status is OfferStatus.QUOTED
-                and (offer.unit_price.amount is not None or offer.total_price.amount is not None)
+                and (
+                    offer.unit_price.amount is not None
+                    or offer.total_price.amount is not None
+                )
                 and (offer.unit_price.currency or offer.total_price.currency)
             }
             complete_prices = [
                 offer
                 for offer in offers
                 if offer.status is OfferStatus.QUOTED
-                and (offer.unit_price.amount is not None or offer.total_price.amount is not None)
+                and (
+                    offer.unit_price.amount is not None
+                    or offer.total_price.amount is not None
+                )
                 and (offer.unit_price.currency or offer.total_price.currency)
             ]
             if len(currencies) > 1:
@@ -209,7 +247,10 @@ class ComparisonBuilder:
                 item_warnings.append(
                     self._warning(
                         ComparisonWarningCode.CURRENCY_MISMATCH,
-                        f"Quoted prices for {product_name} use multiple currencies; no FX conversion was applied.",
+                        (
+                            f"Quoted prices for {product_name} use multiple currencies; "
+                            "no FX conversion was applied."
+                        ),
                     )
                 )
             elif len(complete_prices) >= 2:
@@ -237,7 +278,7 @@ class ComparisonBuilder:
         participant: SupplierParticipant,
         quote: Quote,
         item: QuoteItem,
-        requested,
+        requested: Quantity,
     ) -> ComparisonOffer:
         warnings: list[ComparisonWarning] = []
         quoted_quantity = self._normalizer.quantity(item.quantity, item.unit)
@@ -256,7 +297,10 @@ class ComparisonBuilder:
             warnings.append(
                 self._warning(
                     ComparisonWarningCode.UNIT_MISMATCH,
-                    "Quoted unit differs from the requested unit; no conversion was assumed.",
+                    (
+                        "Quoted unit differs from the requested unit; "
+                        "no conversion was assumed."
+                    ),
                     supplier_id=participant.supplier_id,
                     quote_id=quote.id,
                     quote_item_id=item.id,
@@ -276,7 +320,9 @@ class ComparisonBuilder:
                     quote_item_id=item.id,
                 )
             )
-        if currency is None and (item.unit_price is not None or item.total_price is not None):
+        if currency is None and (
+            item.unit_price is not None or item.total_price is not None
+        ):
             warnings.append(
                 self._warning(
                     ComparisonWarningCode.MISSING_CURRENCY,
@@ -321,20 +367,20 @@ class ComparisonBuilder:
                 )
             )
 
-        if any(
-            warning.code
-            in {
-                ComparisonWarningCode.MISSING_PRICE,
-                ComparisonWarningCode.MISSING_CURRENCY,
-                ComparisonWarningCode.COMPLIANCE_UNKNOWN,
-                ComparisonWarningCode.DELIVERY_UNKNOWN,
-            }
-            for warning in warnings
-        ):
+        incomplete_codes = {
+            ComparisonWarningCode.MISSING_PRICE,
+            ComparisonWarningCode.MISSING_CURRENCY,
+            ComparisonWarningCode.COMPLIANCE_UNKNOWN,
+            ComparisonWarningCode.DELIVERY_UNKNOWN,
+        }
+        if any(warning.code in incomplete_codes for warning in warnings):
             warnings.append(
                 self._warning(
                     ComparisonWarningCode.INCOMPLETE_QUOTE,
-                    "Quoted product has incomplete fields for one or more comparison dimensions.",
+                    (
+                        "Quoted product has incomplete fields for one or more "
+                        "comparison dimensions."
+                    ),
                     supplier_id=participant.supplier_id,
                     quote_id=quote.id,
                     quote_item_id=item.id,
