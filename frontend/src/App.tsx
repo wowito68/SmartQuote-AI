@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Layout, type ViewKey } from "./components/Layout";
 import { Toast } from "./components/ui";
 import { CatalogPanel } from "./features/catalog/CatalogPanel";
+import { ComparisonPanel } from "./features/comparison/ComparisonPanel";
 import { Dashboard } from "./features/dashboard/Dashboard";
 import { DocumentsPanel } from "./features/documents/DocumentsPanel";
 import { QuotesPanel } from "./features/quotes/QuotesPanel";
@@ -22,7 +23,16 @@ import type {
 } from "./lib/types";
 
 const DEFAULT_USER_ID = "00000000-0000-0000-0000-000000000001";
-const views = ["dashboard", "tenders", "documents", "catalog", "suppliers", "rfqs", "quotes"] as const;
+const views = [
+  "dashboard",
+  "tenders",
+  "documents",
+  "catalog",
+  "suppliers",
+  "rfqs",
+  "quotes",
+  "comparison"
+] as const;
 
 function getInitialView(): ViewKey {
   const hash = window.location.hash.replace("#", "");
@@ -522,6 +532,13 @@ export function App() {
         quotes={quotes}
         loading={loadingQuotes}
         onRefresh={() => loadQuotes()}
+        onError={reportError}
+      />
+    ) : activeView === "comparison" ? (
+      <ComparisonPanel
+        tenderId={selectedTender?.id ?? null}
+        userId={userId}
+        onTenderChanged={loadTenders}
         onError={reportError}
       />
     ) : null;
