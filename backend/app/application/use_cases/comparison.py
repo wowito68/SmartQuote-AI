@@ -8,6 +8,7 @@ from app.application.dtos.comparison import (
     ComparisonResponse,
     ComparisonWarningResponse,
 )
+from app.application.exceptions import TenderNotFound
 from app.application.ports.unit_of_work import UnitOfWorkFactory
 from app.application.services.comparison_builder import (
     ApprovedQuoteSource,
@@ -147,8 +148,6 @@ class GenerateTenderComparison:
         with self._uow_factory() as uow:
             tender = uow.tenders.get_by_id(tender_id)
             if tender is None:
-                from app.application.exceptions import TenderNotFound
-
                 raise TenderNotFound("Tender was not found.")
             if not uow.users.exists(created_by_user_id):
                 raise ComparisonNotReady("Comparison creator user does not exist.")
@@ -233,14 +232,20 @@ class GenerateTenderComparison:
                 tuple(
                     sorted(
                         participant_by_supplier.values(),
-                        key=lambda item: (item.supplier_name.casefold(), str(item.supplier_id)),
+                        key=lambda item: (
+                            item.supplier_name.casefold(),
+                            str(item.supplier_id),
+                        ),
                     )
                 ),
                 tuple(sources),
             )
             stored = uow.comparisons.create(comparison)
 
-            if stored.status is ComparisonStatus.READY and tender.status is TenderStatus.QUOTE_ANALYSIS:
+            if (
+                stored.status is ComparisonStatus.READY
+                and tender.status is TenderStatus.QUOTE_ANALYSIS
+            ):
                 tender.change_status(TenderStatus.COMPARISON_READY)
                 uow.tenders.update(tender)
 
