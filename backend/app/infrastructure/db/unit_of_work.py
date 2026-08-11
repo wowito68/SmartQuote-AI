@@ -7,6 +7,9 @@ from app.infrastructure.db.repositories.audit_event_repository import (
     SqlAlchemyAuditEventRepository,
 )
 from app.infrastructure.db.repositories.catalog_repository import SqlAlchemyCatalogRepository
+from app.infrastructure.db.repositories.comparison_repository import (
+    SqlAlchemyComparisonRepository,
+)
 from app.infrastructure.db.repositories.document_processing_repository import (
     SqlAlchemyExtractionRepository,
 )
@@ -42,6 +45,7 @@ class SqlAlchemyUnitOfWork(UnitOfWork):
         self.rfqs = SqlAlchemyRfqRepository(self._session)
         self.quotes = SqlAlchemyQuoteRepository(self._session)
         self.quote_artifacts = SqlAlchemyQuoteAnalysisArtifactRepository(self._session)
+        self.comparisons = SqlAlchemyComparisonRepository(self._session)
         self.users = SqlAlchemyUserLookup(self._session)
         return self
 

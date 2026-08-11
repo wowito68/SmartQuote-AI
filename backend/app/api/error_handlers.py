@@ -14,6 +14,7 @@ from app.domain.catalog.exceptions import (
     InvalidProductState,
     PromptNotFound,
 )
+from app.domain.comparison import exceptions as comparison_exceptions
 from app.domain.documents.exceptions import (
     DocumentAlreadyDeleted,
     DocumentExtractionFailure,
@@ -124,9 +125,11 @@ def register_exception_handlers(app: FastAPI) -> None:
         (QuoteDocumentNotFound, status.HTTP_404_NOT_FOUND, "quote_document_not_found"),
         (QuoteItemNotFound, status.HTTP_404_NOT_FOUND, "quote_item_not_found"),
         (ComparisonNotFound, status.HTTP_404_NOT_FOUND, "comparison_not_found"),
+        (comparison_exceptions.ComparisonNotFound, status.HTTP_404_NOT_FOUND, "comparison_not_found"),
         (DuplicateQuote, status.HTTP_409_CONFLICT, "duplicate_quote"),
         (InvalidQuoteState, status.HTTP_409_CONFLICT, "invalid_quote_state"),
         (ComparisonNotReady, status.HTTP_409_CONFLICT, "comparison_not_ready"),
+        (comparison_exceptions.ComparisonNotReady, status.HTTP_409_CONFLICT, "comparison_not_ready"),
         (QuoteStorageError, status.HTTP_503_SERVICE_UNAVAILABLE, "quote_storage_unavailable"),
         (QuoteProviderError, status.HTTP_503_SERVICE_UNAVAILABLE, "quote_provider_unavailable"),
         (QuoteExtractionFailure, status.HTTP_503_SERVICE_UNAVAILABLE, "quote_extraction_failed"),

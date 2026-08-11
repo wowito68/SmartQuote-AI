@@ -4,6 +4,7 @@ from types import TracebackType
 
 from app.application.ports.audit_event_repository import AuditEventRepository
 from app.application.ports.catalog_repository import CatalogRepository
+from app.application.ports.comparison_repository import ComparisonRepository
 from app.application.ports.document_repository import TenderDocumentRepository
 from app.application.ports.extraction_repository import ExtractionRepository
 from app.application.ports.quote_analysis_artifact_repository import (
@@ -26,6 +27,7 @@ class UnitOfWork(ABC):
     rfqs: RfqRepository
     quotes: QuoteRepository
     quote_artifacts: QuoteAnalysisArtifactRepository
+    comparisons: ComparisonRepository
     users: UserLookup
 
     @abstractmethod

@@ -7,6 +7,11 @@ from app.infrastructure.db.models.catalog import (
     EvidenceReferenceModel,
     ExtractedEvidenceModel,
 )
+from app.infrastructure.db.models.comparison import (
+    ComparisonItemModel,
+    ComparisonModel,
+    ComparisonOfferModel,
+)
 from app.infrastructure.db.models.document_processing import (
     DocumentPageModel,
     DocumentQualityModel,
@@ -49,6 +54,9 @@ __all__ = [
     "CatalogProductModel",
     "CatalogProductRevisionModel",
     "CatalogSnapshotModel",
+    "ComparisonItemModel",
+    "ComparisonModel",
+    "ComparisonOfferModel",
     "ComparisonRunModel",
     "DocumentPageModel",
     "DocumentQualityModel",
