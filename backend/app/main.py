@@ -21,7 +21,8 @@ def create_app() -> FastAPI:
         title=settings.project_name,
         version=settings.version,
         description=(
-            "REST API for SmartQuote AI tender sourcing, RFQ delivery, quote analysis and deterministic comparison."
+            "REST API for SmartQuote AI tender sourcing, RFQ delivery, "
+            "quote analysis and deterministic comparison."
         ),
     )
     register_exception_handlers(application)
