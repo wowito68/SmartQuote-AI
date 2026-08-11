@@ -140,8 +140,15 @@ def test_comparison_v2_is_descriptive_idempotent_and_auditable(tmp_path: Path) -
         assert payload["items"]
         assert "recommendation" not in payload
         assert "score" not in str(payload).lower()
-        assert payload["items"][0]["offers"][0]["quote_id"] == str(quote_id)
-        assert payload["items"][0]["offers"][0]["evidence_id"] is not None
+
+        offers = [offer for item in payload["items"] for offer in item["offers"]]
+        quoted = next(offer for offer in offers if offer["quote_id"] == str(quote_id))
+        assert quoted["status"] == "quoted"
+        assert quoted["evidence_id"] is not None
+        missing = [offer for offer in offers if offer["status"] == "missing"]
+        assert missing
+        assert all(offer["unit_price"] is None for offer in missing)
+        assert all(offer["total_price"] is None for offer in missing)
 
         repeated = client.post(
             f"/api/v1/tenders/{tender_id}/comparisons",
