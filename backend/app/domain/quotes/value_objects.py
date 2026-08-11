@@ -8,6 +8,10 @@ from app.domain.shared.exceptions import ValidationError
 class QuoteStatus(StrEnum):
     RECEIVED = "received"
     VALIDATING = "validating"
+    READY_FOR_ANALYSIS = "ready_for_analysis"
+    ANALYZING = "analyzing"
+    ANALYZED = "analyzed"
+    # Legacy states retained for already-persisted Iteration 9/12 records.
     EXTRACTING = "extracting"
     EXTRACTED = "extracted"
     NORMALIZED = "normalized"
@@ -23,6 +27,7 @@ class QuoteExtractionRunStatus(StrEnum):
     RUNNING = "running"
     COMPLETED = "completed"
     FAILED = "failed"
+    CANCELLED = "cancelled"
     REUSED = "reused"
 
 
@@ -78,6 +83,7 @@ class QuoteWarning(StrEnum):
     TECHNICAL_COMPLIANCE_UNKNOWN = "TECHNICAL_COMPLIANCE_UNKNOWN"
     TECHNICAL_NON_COMPLIANCE = "TECHNICAL_NON_COMPLIANCE"
     LOW_CONFIDENCE = "LOW_CONFIDENCE"
+    EVIDENCE_MISSING = "EVIDENCE_MISSING"
 
 
 @dataclass(frozen=True, slots=True)

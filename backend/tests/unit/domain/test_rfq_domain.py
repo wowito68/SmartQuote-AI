@@ -46,7 +46,9 @@ def make_rfq(*, recipients=("ventas@example.mx",)) -> RfqRequest:
 def test_rfq_state_machine_freezes_content_after_approval() -> None:
     rfq = make_rfq()
     rfq.edit(subject="Solicitud actualizada", cc_recipients=("compras@example.mx",))
+    assert rfq.status is RfqStatus.DRAFT
     assert rfq.version == 2
+    rfq.start_review()
     attachment = make_attachment(rfq.id)
     reviewer = uuid4()
     rfq.approve(reviewer, (attachment,))
@@ -68,12 +70,14 @@ def test_rfq_requires_primary_recipient_before_approval_and_allows_failed_retry(
     with pytest.raises(ValidationError):
         rfq.approve(uuid4(), ())
     rfq.edit(to_recipients=("VENTAS@EXAMPLE.MX",))
+    rfq.start_review()
     rfq.approve(uuid4(), ())
     sender = uuid4()
     rfq.queue(sender)
     rfq.start_sending()
     rfq.mark_failed("SMTP timeout")
     assert rfq.status is RfqStatus.FAILED
+    rfq.mark_retry_pending("retry requested")
     rfq.queue(sender)
     assert rfq.status is RfqStatus.QUEUED
 

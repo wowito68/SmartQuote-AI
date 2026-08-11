@@ -86,13 +86,16 @@ class OpenAIExtractionService(AIExtractionService):
     def _render_pages(pages: tuple[dict[str, Any], ...]) -> str:
         rendered: list[str] = []
         for index, page in enumerate(pages, start=1):
+            page_number = page.get("page_number")
             locator = page.get("locator")
-            if not locator:
-                locator = f"page:{page.get('page_number', index)}"
-            kind = page.get("locator_type") or ("page" if page.get("page_number") else "section")
-            rendered.append(
-                f"--- SOURCE {index} [{kind} {locator}] ---\n{page.get('text', '')}"
-            )
+            kind = page.get("locator_type")
+            if page_number is not None and (not kind or kind == "page"):
+                header = f"--- PAGE {page_number} ---"
+            else:
+                locator = locator or f"section:{index}"
+                kind = kind or "section"
+                header = f"--- SOURCE {index} [{kind} {locator}] ---"
+            rendered.append(f"{header}\n{page.get('text', '')}")
         return "\n\n".join(rendered)
 
     def extract(self, request: AIExtractionRequest) -> AIExtractionResult:

@@ -10,7 +10,7 @@ from app.domain.suppliers.entities import SupplierContact, TenderSupplier
 from app.domain.suppliers.value_objects import SupplierContactType, SupplierStatus
 from app.domain.tenders.value_objects import TenderStatus
 
-_ALLOWED_RFQ_ROLES = {"admin", "buyer", "procurement"}
+_ALLOWED_RFQ_ROLES = {"admin", "buyer", "procurement", "system"}
 
 
 @dataclass(frozen=True, slots=True)
@@ -87,6 +87,7 @@ def validate_rfq_send(uow: UnitOfWork, rfq: RfqRequest, user_id: UUID) -> Valida
         RfqStatus.APPROVED,
         RfqStatus.QUEUED,
         RfqStatus.SENDING,
+        RfqStatus.SENT,
         RfqStatus.FAILED,
         RfqStatus.RETRY_PENDING,
     }:

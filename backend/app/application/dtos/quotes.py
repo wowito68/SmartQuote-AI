@@ -34,7 +34,7 @@ class UploadQuoteDocumentCommand:
     file: UploadDocumentFile
     rfq_request_id: UUID | None = None
     correlation_id: str | None = None
-    auto_process: bool = True
+    auto_process: bool = False
 
 
 @dataclass(frozen=True, slots=True)

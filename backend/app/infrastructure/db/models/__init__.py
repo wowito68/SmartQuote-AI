@@ -22,6 +22,7 @@ from app.infrastructure.db.models.quote import (
     QuoteModel,
     QuoteTaskRecordModel,
 )
+from app.infrastructure.db.models.quote_analysis import QuoteExtractionArtifactModel
 from app.infrastructure.db.models.rfq import (
     EmailAttachmentModel,
     EmailMessageModel,
@@ -60,6 +61,7 @@ __all__ = [
     "ProductSupplierMatchModel",
     "QuoteDocumentModel",
     "QuoteEvidenceReferenceModel",
+    "QuoteExtractionArtifactModel",
     "QuoteExtractionRunModel",
     "QuoteItemModel",
     "QuoteItemRevisionModel",

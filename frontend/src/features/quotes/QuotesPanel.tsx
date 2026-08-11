@@ -1,4 +1,12 @@
-import { Check, FileSearch, RefreshCcw, RotateCcw, Upload, X } from "lucide-react";
+import {
+  Check,
+  FileSearch,
+  RefreshCcw,
+  RotateCcw,
+  Sparkles,
+  Upload,
+  X
+} from "lucide-react";
 import { useMemo, useState } from "react";
 
 import {
@@ -51,8 +59,8 @@ export function QuotesPanel({
   return (
     <Section
       title="Cotizaciones"
-      eyebrow="Recepcion y analisis manual"
-      description="Carga PDF, XLSX o DOCX; revisa incertidumbre y evidencia antes de aprobar."
+      eyebrow="Recepcion y analisis IA"
+      description="Registra la cotizacion recibida y decide explicitamente cuando iniciar el analisis automatico."
       action={
         <>
           <Button variant="secondary" onClick={() => void onRefresh()}>
@@ -196,7 +204,7 @@ function UploadQuoteModal({
     <Modal
       open={open}
       title="Cargar cotizacion recibida"
-      description="La recepcion es manual. El archivo se almacena en privado y se procesa de forma asincrona."
+      description="La recepcion es manual. El archivo se almacena en privado y queda listo para analisis posterior."
       onClose={onClose}
       footer={
         <>
@@ -208,7 +216,7 @@ function UploadQuoteModal({
             disabled={!supplierId || !file}
             onClick={() => void upload()}
           >
-            Cargar y analizar
+            Cargar cotizacion
           </Button>
         </>
       }
@@ -256,8 +264,9 @@ function UploadQuoteModal({
           />
         </Field>
         <p className="text-xs text-text-secondary">
-          No se ejecutan macros, formulas ni contenido embebido. XLSX y DOCX se
-          tratan exclusivamente como datos.
+          La carga no inicia IA automaticamente. XLSX y DOCX mantienen el soporte
+          de lectura segura existente; PDF es el formato objetivo de analisis de
+          esta iteracion.
         </p>
       </div>
     </Modal>
@@ -284,9 +293,7 @@ function QuoteReview({
   const warnings = Array.from(
     new Set(quote.items.flatMap((item) => item.warnings))
   );
-  const latestRun = quote.extraction_runs[
-    quote.extraction_runs.length - 1
-  ];
+  const latestRun = quote.extraction_runs[quote.extraction_runs.length - 1];
 
   async function action(name: string, fn: () => Promise<unknown>) {
     setBusy(name);
@@ -328,14 +335,27 @@ function QuoteReview({
         ) : null}
         {warnings.length ? (
           <div className="rounded-control border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-            <p className="font-medium">Requiere atencion</p>
+            <p className="font-medium">Requiere revision</p>
             <p className="mt-1">{warnings.join(" · ")}</p>
           </div>
         ) : null}
         <div className="flex flex-wrap gap-2">
+          {quote.status === "ready_for_analysis" ? (
+            <Button
+              size="sm"
+              loading={busy === "analyze"}
+              onClick={() =>
+                void action("analyze", () => quoteApi.analyze(quote.id, userId))
+              }
+            >
+              <Sparkles className="h-4 w-4" />
+              Analizar cotizacion
+            </Button>
+          ) : null}
           <Button
             size="sm"
             variant="secondary"
+            disabled={quote.items.length === 0}
             onClick={() => void loadEvidence()}
           >
             <FileSearch className="h-4 w-4" />
@@ -372,19 +392,21 @@ function QuoteReview({
               </Button>
             </>
           ) : null}
-          {["pending_review", "rejected", "failed"].includes(quote.status) ? (
+          {["pending_review", "rejected", "failed", "analyzed"].includes(
+            quote.status
+          ) ? (
             <Button
               size="sm"
               variant="secondary"
-              loading={busy === "reprocess"}
+              loading={busy === "reanalyze"}
               onClick={() =>
-                void action("reprocess", () =>
-                  quoteApi.reprocess(quote.id, userId)
+                void action("reanalyze", () =>
+                  quoteApi.reanalyze(quote.id, userId)
                 )
               }
             >
               <RotateCcw className="h-4 w-4" />
-              Reprocess
+              Reanalizar
             </Button>
           ) : null}
         </div>
@@ -450,6 +472,13 @@ function QuoteItemCard({
   editable: boolean;
   onEdit: () => void;
 }) {
+  const requiresReview =
+    item.warnings.length > 0 ||
+    item.catalog_product_id == null ||
+    item.match_status !== "matched" ||
+    item.confidence < 0.7 ||
+    item.source_evidence_id == null;
+
   return (
     <Card className="grid gap-3">
       <div className="flex flex-wrap justify-between gap-3">
@@ -463,9 +492,17 @@ function QuoteItemCard({
           </p>
           <p className="font-semibold">{item.product_name}</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <StatusBadge value={item.match_status} />
           <StatusBadge value={item.compliance_status} />
+          <span className="rounded-full bg-slate-100 px-2 py-1 text-xs text-slate-700">
+            Extraido automaticamente
+          </span>
+          {requiresReview ? (
+            <span className="rounded-full bg-amber-100 px-2 py-1 text-xs text-amber-800">
+              Requiere revision
+            </span>
+          ) : null}
         </div>
       </div>
       <div className="grid gap-2 text-sm sm:grid-cols-2 lg:grid-cols-4">
@@ -483,9 +520,7 @@ function QuoteItemCard({
         />
         <Value
           label="Entrega"
-          value={
-            item.delivery_days == null ? "?" : `${item.delivery_days} dias`
-          }
+          value={item.delivery_days == null ? "?" : `${item.delivery_days} dias`}
         />
       </div>
       <div className="flex flex-wrap items-center gap-2 text-xs text-text-secondary">
@@ -504,7 +539,9 @@ function QuoteItemCard({
         <p className="border-l-2 border-brand-teal pl-3 text-sm text-text-secondary">
           {item.evidence_fragment}
         </p>
-      ) : null}
+      ) : (
+        <p className="text-sm text-amber-800">Sin evidencia vinculada.</p>
+      )}
       {editable ? (
         <Button size="sm" variant="secondary" onClick={onEdit}>
           Corregir item
@@ -686,9 +723,7 @@ function EditItemModal({
             className="h-10 w-full rounded-control border border-border-subtle px-3 text-sm"
             value={compliance}
             onChange={(event) =>
-              setCompliance(
-                event.target.value as QuoteItem["compliance_status"]
-              )
+              setCompliance(event.target.value as QuoteItem["compliance_status"])
             }
           >
             <option value="compliant">Cumple</option>

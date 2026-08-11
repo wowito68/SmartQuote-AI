@@ -26,7 +26,7 @@ jobs:
       - name: Install locked dependencies
         run: uv sync --frozen
       - name: Ruff lint
-        run: uv run ruff check .
+        run: uv run ruff check . --output-format=github
       - name: Compile Python sources
         run: uv run python -m compileall app tests alembic
 
@@ -172,7 +172,38 @@ jobs:
       - run: uv sync --frozen
       - run: uv run alembic upgrade head
       - run: uv run --with coverage coverage run --source=app -m pytest -q
-      - run: uv run --with coverage coverage report --fail-under=90
+      - name: Report coverage
+        run: |
+          uv run --with coverage coverage report
+          uv run --with coverage coverage json -o coverage.json
+      - name: Enforce 90 percent coverage
+        run: |
+          uv run python - <<'PY'
+          import json
+          from pathlib import Path
+          payload = json.loads(Path("coverage.json").read_text())
+          percent = float(payload["totals"]["percent_covered"])
+          print(f"Total coverage: {percent:.2f}%")
+          files = []
+          for path, data in payload.get("files", {}).items():
+              summary = data.get("summary", {})
+              missing = int(summary.get("missing_lines", 0))
+              statements = int(summary.get("num_statements", 0))
+              covered = float(summary.get("percent_covered", 100.0))
+              if missing:
+                  files.append((missing, statements, covered, path))
+          for missing, statements, covered, path in sorted(files, reverse=True)[:15]:
+              print(
+                  f"::warning file={path},title=Coverage gap::"
+                  f"{missing} missing of {statements} statements; {covered:.2f}% covered"
+              )
+          if percent < 90:
+              print(
+                  f"::error title=Coverage below threshold::"
+                  f"Total coverage {percent:.2f}% is below required 90.00%"
+              )
+              raise SystemExit(1)
+          PY
       - run: uv run --with coverage coverage xml
       - uses: actions/upload-artifact@v4
         with:
