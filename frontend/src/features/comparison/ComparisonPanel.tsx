@@ -1,5 +1,5 @@
 import { FileSearch, RefreshCcw } from "lucide-react";
-import { useMemo } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 
 import {
   Alert,
@@ -11,8 +11,10 @@ import {
   Section,
   StatusBadge
 } from "../../components/ui";
+import { ApiError } from "../../lib/api";
 import { formatDate } from "../../lib/format";
 import type { UUID } from "../../lib/types";
+import { comparisonApi } from "./api";
 import type {
   Comparison,
   ComparisonCompliance,
@@ -22,19 +24,24 @@ import type {
 
 export function ComparisonPanel({
   tenderId,
-  comparison,
-  loading,
-  generating,
-  onRefresh,
-  onGenerate
+  userId,
+  onTenderChanged,
+  onError
 }: {
   tenderId: UUID | null;
-  comparison: Comparison | null;
-  loading: boolean;
-  generating: boolean;
-  onRefresh: () => Promise<void>;
-  onGenerate: () => Promise<void>;
+  userId: UUID;
+  onTenderChanged: () => Promise<void>;
+  onError: (error: unknown) => void;
 }) {
+  const [comparison, setComparison] = useState<Comparison | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [generating, setGenerating] = useState(false);
+
+  useEffect(() => {
+    setComparison(null);
+    if (tenderId) void refresh(tenderId);
+  }, [tenderId]);
+
   const suppliers = useMemo(() => {
     const values = new Map<UUID, string>();
     comparison?.items.forEach((item) => {
@@ -42,6 +49,35 @@ export function ComparisonPanel({
     });
     return [...values.entries()].map(([id, name]) => ({ id, name }));
   }, [comparison]);
+
+  async function refresh(id = tenderId) {
+    if (!id) return;
+    setLoading(true);
+    try {
+      setComparison(await comparisonApi.latest(id));
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 404) {
+        setComparison(null);
+      } else {
+        onError(error);
+      }
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function generate() {
+    if (!tenderId) return;
+    setGenerating(true);
+    try {
+      setComparison(await comparisonApi.generate(tenderId, userId));
+      await onTenderChanged();
+    } catch (error) {
+      onError(error);
+    } finally {
+      setGenerating(false);
+    }
+  }
 
   if (loading && !comparison) {
     return <LoadingState label="Cargando comparativo" />;
@@ -57,7 +93,7 @@ export function ComparisonPanel({
           <Button
             variant="secondary"
             disabled={!tenderId}
-            onClick={() => void onRefresh()}
+            onClick={() => void refresh()}
           >
             <RefreshCcw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
             Refrescar
@@ -65,7 +101,7 @@ export function ComparisonPanel({
           <Button
             disabled={!tenderId}
             loading={generating}
-            onClick={() => void onGenerate()}
+            onClick={() => void generate()}
           >
             Generar comparativo
           </Button>
@@ -83,7 +119,7 @@ export function ComparisonPanel({
           title="Aun no existe un comparativo"
           detail="El comparativo requiere un catalogo aprobado y al menos una cotizacion aprobada."
           action={
-            <Button loading={generating} onClick={() => void onGenerate()}>
+            <Button loading={generating} onClick={() => void generate()}>
               Generar comparativo
             </Button>
           }
@@ -144,7 +180,7 @@ function ComparisonSummary({ comparison }: { comparison: Comparison }) {
   );
 }
 
-function Metric({ label, value }: { label: string; value: React.ReactNode }) {
+function Metric({ label, value }: { label: string; value: ReactNode }) {
   return (
     <Card padding="sm">
       <p className="text-xs font-medium uppercase tracking-wide text-text-secondary">{label}</p>
@@ -160,7 +196,10 @@ function ComparisonWarnings({ warnings }: { warnings: ComparisonWarning[] }) {
       <p className="text-sm font-semibold text-text-primary">Advertencias generales</p>
       <div className="mt-3 flex flex-wrap gap-2">
         {warnings.map((warning, index) => (
-          <Badge key={`${warning.code}-${index}`} tone={warning.severity === "critical" ? "danger" : "warning"}>
+          <Badge
+            key={`${warning.code}-${index}`}
+            tone={warning.severity === "critical" ? "danger" : "warning"}
+          >
             {warning.code}
           </Badge>
         ))}
@@ -182,9 +221,14 @@ function ComparisonMatrix({
         <table className="min-w-full border-collapse text-left text-sm">
           <thead className="bg-slate-50 text-xs uppercase tracking-wide text-text-secondary">
             <tr>
-              <th className="min-w-64 border-b border-border-subtle px-4 py-3">Producto solicitado</th>
+              <th className="min-w-64 border-b border-border-subtle px-4 py-3">
+                Producto solicitado
+              </th>
               {suppliers.map((supplier) => (
-                <th key={supplier.id} className="min-w-80 border-b border-l border-border-subtle px-4 py-3">
+                <th
+                  key={supplier.id}
+                  className="min-w-80 border-b border-l border-border-subtle px-4 py-3"
+                >
                   {supplier.name}
                 </th>
               ))}
@@ -196,19 +240,27 @@ function ComparisonMatrix({
                 <td className="border-b border-border-subtle px-4 py-4">
                   <p className="font-semibold text-text-primary">{item.requested_product}</p>
                   <p className="mt-1 text-xs text-text-secondary">
-                    Solicitado: {formatNumber(item.requested_quantity)} {item.requested_unit ?? "unidad desconocida"}
+                    Solicitado: {formatNumber(item.requested_quantity)}{" "}
+                    {item.requested_unit ?? "unidad desconocida"}
                   </p>
                   <div className="mt-3">
-                    <Badge tone={item.monetary_status === "comparable" ? "success" : "warning"}>
+                    <Badge
+                      tone={item.monetary_status === "comparable" ? "success" : "warning"}
+                    >
                       {item.monetary_status}
                     </Badge>
                   </div>
                   <WarningBadges warnings={item.warnings} />
                 </td>
                 {suppliers.map((supplier) => {
-                  const offer = item.offers.find((candidate) => candidate.supplier_id === supplier.id);
+                  const offer = item.offers.find(
+                    (candidate) => candidate.supplier_id === supplier.id
+                  );
                   return (
-                    <td key={supplier.id} className="border-b border-l border-border-subtle px-4 py-4">
+                    <td
+                      key={supplier.id}
+                      className="border-b border-l border-border-subtle px-4 py-4"
+                    >
                       {offer ? <OfferCell offer={offer} /> : <MissingOffer />}
                     </td>
                   );
@@ -224,9 +276,10 @@ function ComparisonMatrix({
 
 function OfferCell({ offer }: { offer: ComparisonOffer }) {
   if (offer.status === "missing") return <MissingOffer />;
-  const delivery = offer.delivery_days !== null
-    ? `${offer.delivery_days} dias`
-    : offer.delivery_original_text ?? "Desconocida";
+  const delivery =
+    offer.delivery_days !== null
+      ? `${offer.delivery_days} dias`
+      : offer.delivery_original_text ?? "Desconocida";
   return (
     <div className="grid gap-3">
       <div className="flex flex-wrap items-center gap-2">
@@ -245,21 +298,29 @@ function OfferCell({ offer }: { offer: ComparisonOffer }) {
         </p>
       </div>
       <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
-        <Data label="Cantidad" value={`${formatNumber(offer.quantity)} ${offer.unit ?? "—"}`} />
+        <Data
+          label="Cantidad"
+          value={`${formatNumber(offer.quantity)} ${offer.unit ?? "—"}`}
+        />
         <Data label="Cantidad vs solicitud" value={offer.quantity_status} />
         <Data label="Precio unitario" value={formatMoney(offer.unit_price, offer.currency)} />
         <Data label="Precio total" value={formatMoney(offer.total_price, offer.currency)} />
         <Data label="Entrega" value={delivery} />
-        <Data label="Evidencia" value={offer.evidence_id ? "Disponible" : "No referenciada"} />
+        <Data
+          label="Evidencia"
+          value={offer.evidence_id ? "Disponible" : "No referenciada"}
+        />
       </dl>
       {offer.commercial_terms ? (
         <p className="text-xs leading-5 text-text-secondary">
-          <span className="font-medium text-text-primary">Condiciones:</span> {offer.commercial_terms}
+          <span className="font-medium text-text-primary">Condiciones:</span>{" "}
+          {offer.commercial_terms}
         </p>
       ) : null}
       {offer.observations ? (
         <p className="text-xs leading-5 text-text-secondary">
-          <span className="font-medium text-text-primary">Observaciones:</span> {offer.observations}
+          <span className="font-medium text-text-primary">Observaciones:</span>{" "}
+          {offer.observations}
         </p>
       ) : null}
       <WarningBadges warnings={offer.warnings} />
@@ -271,7 +332,9 @@ function MissingOffer() {
   return (
     <div className="rounded-panel border border-dashed border-border-subtle bg-slate-50 p-4">
       <Badge tone="warning">No cotizado</Badge>
-      <p className="mt-2 text-xs text-text-secondary">Sin QuoteItem. Precio y cantidad permanecen nulos.</p>
+      <p className="mt-2 text-xs text-text-secondary">
+        Sin QuoteItem. Precio y cantidad permanecen nulos.
+      </p>
     </div>
   );
 }
@@ -281,7 +344,10 @@ function WarningBadges({ warnings }: { warnings: ComparisonWarning[] }) {
   return (
     <div className="mt-2 flex flex-wrap gap-1.5">
       {warnings.map((warning, index) => (
-        <Badge key={`${warning.code}-${index}`} tone={warning.severity === "critical" ? "danger" : "warning"}>
+        <Badge
+          key={`${warning.code}-${index}`}
+          tone={warning.severity === "critical" ? "danger" : "warning"}
+        >
           {warning.code}
         </Badge>
       ))}
@@ -298,7 +364,9 @@ function Data({ label, value }: { label: string; value: string }) {
   );
 }
 
-function complianceTone(value: ComparisonCompliance): "success" | "warning" | "danger" | "neutral" {
+function complianceTone(
+  value: ComparisonCompliance
+): "success" | "warning" | "danger" | "neutral" {
   if (value === "compliant") return "success";
   if (value === "non_compliant") return "danger";
   if (value === "partially_compliant") return "warning";
