@@ -5,6 +5,7 @@ import {
   ChevronRight,
   ClipboardList,
   FileText,
+  GitCompareArrows,
   Handshake,
   Mail,
   Menu,
@@ -18,7 +19,7 @@ import { useState } from "react";
 
 import { IconButton, StatusBadge, Tooltip } from "./ui";
 
-export type ViewKey = "dashboard" | "tenders" | "documents" | "catalog" | "suppliers" | "rfqs" | "quotes";
+export type ViewKey = "dashboard" | "tenders" | "documents" | "catalog" | "suppliers" | "rfqs" | "quotes" | "comparison";
 
 const navItems: Array<{ key: ViewKey; label: string; icon: ReactNode }> = [
   { key: "dashboard", label: "Tablero", icon: <BarChart3 className="h-4 w-4" /> },
@@ -27,7 +28,8 @@ const navItems: Array<{ key: ViewKey; label: string; icon: ReactNode }> = [
   { key: "catalog", label: "Catalogo", icon: <Boxes className="h-4 w-4" /> },
   { key: "suppliers", label: "Proveedores", icon: <Handshake className="h-4 w-4" /> },
   { key: "rfqs", label: "RFQs", icon: <Mail className="h-4 w-4" /> },
-  { key: "quotes", label: "Cotizaciones", icon: <ReceiptText className="h-4 w-4" /> }
+  { key: "quotes", label: "Cotizaciones", icon: <ReceiptText className="h-4 w-4" /> },
+  { key: "comparison", label: "Comparativo", icon: <GitCompareArrows className="h-4 w-4" /> }
 ];
 
 const pageCopy: Record<ViewKey, { title: string; description: string }> = {
@@ -37,7 +39,8 @@ const pageCopy: Record<ViewKey, { title: string; description: string }> = {
   catalog: { title: "Catalogo", description: "Revisa productos extraidos, confianza y aprobaciones." },
   suppliers: { title: "Proveedores", description: "Administra candidatos, contactos y aprobaciones." },
   rfqs: { title: "RFQs", description: "Genera, aprueba y envia solicitudes de cotizacion." },
-  quotes: { title: "Cotizaciones", description: "Recibe cotizaciones manualmente, revisa evidencia y aprueba datos comparables." }
+  quotes: { title: "Cotizaciones", description: "Recibe cotizaciones manualmente, revisa evidencia y aprueba datos comparables." },
+  comparison: { title: "Comparativo", description: "Contrasta cotizaciones aprobadas sin scoring, ranking ni seleccion automatica." }
 };
 
 export function Layout({ activeView, onViewChange, userId, onUserIdChange, healthStatus, selectedTenderTitle, onRefresh, children }: {
