@@ -524,7 +524,7 @@ def test_document_processing_entities_cover_success_failure_and_reuse() -> None:
         "empty_page_percentage": 50.0,
         "text_density": 3.0,
         "quality_level": DocumentQualityLevel.MEDIUM,
-        "decision": DocumentQualityDecision.ACCEPT,
+        "decision": DocumentQualityDecision.READY_FOR_AI,
         "requires_manual_review": False,
     }
     assert DocumentQuality(**quality_values).pages_processed == 2
