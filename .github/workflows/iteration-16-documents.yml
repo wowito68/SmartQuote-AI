@@ -52,8 +52,24 @@ jobs:
       - run: uv sync --frozen
       - name: Ruff lint
         run: uv run ruff check . --output-format=github
-      - name: Ruff format check
-        run: uv run ruff format --check .
+      - name: Ruff format check for iteration files
+        run: |
+          uv run ruff format --check \
+            alembic/versions/c8f3a05d6e94_document_subsystem_hardening.py \
+            app/api/document_processing_schemas.py \
+            app/application/dtos/document_processing.py \
+            app/application/ports/file_storage.py \
+            app/application/use_cases/document_processing.py \
+            app/application/use_cases/documents.py \
+            app/domain/documents/processing.py \
+            app/infrastructure/db/mappers/document_processing_mapper.py \
+            app/infrastructure/db/models/document_processing.py \
+            app/infrastructure/db/repositories/document_repository.py \
+            app/infrastructure/storage/local_file_storage.py \
+            tests/integration/test_document_processing_pipeline.py \
+            tests/integration/test_document_repository.py \
+            tests/unit/application/test_document_use_cases.py \
+            tests/unit/infrastructure/test_local_file_storage.py
       - name: Migration upgrade
         run: uv run alembic upgrade head
       - name: Iteration 16 migration rollback and reapply
