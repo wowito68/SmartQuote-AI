@@ -29,6 +29,7 @@ from app.domain.documents.exceptions import (
     DocumentExtractionNotFound,
     DocumentNotFound,
     DocumentQualityNotFound,
+    DocumentStorageFailure,
     InvalidDocumentFile,
 )
 from app.domain.documents.processing import DocumentPage, ExtractionRun
@@ -119,6 +120,18 @@ class ValidateDocumentForProcessing:
                 DocumentStatus.NEEDS_OCR,
             }:
                 return False
+            if document.status in {DocumentStatus.UPLOADED, DocumentStatus.FAILED}:
+                document.mark_queued()
+                uow.documents.update(document)
+                uow.audit_events.append(
+                    document_queued(document.id, file_hash=document.file_hash.value)
+                )
+            if not self._file_storage.exists(document.storage_key):
+                self._fail(
+                    uow,
+                    document,
+                    DocumentStorageFailure("Stored document does not exist."),
+                )
             content = self._file_storage.read(document.storage_key)
             if not content.startswith(b"%PDF-"):
                 self._fail(uow, document, InvalidDocumentFile("Stored file is not a PDF."))
