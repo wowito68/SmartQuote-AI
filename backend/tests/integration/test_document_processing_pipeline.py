@@ -5,13 +5,16 @@ from uuid import UUID
 from celery.contrib.testing.worker import start_worker
 from fastapi.testclient import TestClient
 from redis import Redis
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 
 from app.api.dependencies import get_processing_queue
 from app.application.ports.document_processing_queue import DocumentProcessingQueue
 from app.config.settings import get_settings
 from app.infrastructure.db.models.audit_event import AuditEventModel
-from app.infrastructure.db.models.document_processing import ExtractionRunModel
+from app.infrastructure.db.models.document_processing import (
+    DocumentPageModel,
+    ExtractionRunModel,
+)
 from app.infrastructure.db.models.tender import TenderDocumentModel
 from app.infrastructure.db.session import SessionLocal
 from app.infrastructure.tasks.celery_app import celery_app
@@ -19,6 +22,7 @@ from app.infrastructure.tasks.document_pipeline import (
     evaluate_quality,
     extract_text,
     finalize_document,
+    start_pipeline,
     validate_document,
 )
 from app.main import app
@@ -86,6 +90,7 @@ def test_complete_pipeline_persists_pages_quality_and_is_idempotent() -> None:
 
         extraction = client.get(f"/api/v1/documents/{document_id}/extraction")
         assert extraction.status_code == 200
+        assert extraction.json()["extraction_type"] == "text"
         assert extraction.json()["extractor_name"] == "pymupdf"
         assert extraction.json()["pages_processed"] == 2
 
@@ -105,6 +110,43 @@ def test_complete_pipeline_persists_pages_quality_and_is_idempotent() -> None:
             "QualityEvaluationCompleted",
             "DocumentReadyForAI",
         }.issubset(events)
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_failed_document_can_retry_pipeline_without_duplicate_evidence() -> None:
+    queue = RecordingQueue()
+    app.dependency_overrides[get_processing_queue] = lambda: queue
+    client = TestClient(app)
+    try:
+        tender_id = create_tender(client, "Retry document tender")
+        document_id = upload_fixture(client, tender_id, "sample_text.pdf")
+        parsed_id = UUID(document_id)
+
+        with SessionLocal.begin() as session:
+            session.execute(
+                update(TenderDocumentModel)
+                .where(TenderDocumentModel.id == parsed_id)
+                .values(processing_status="failed", last_processing_error="transient failure")
+            )
+
+        start_pipeline.run(document_id)
+        status_value = client.get(f"/api/v1/documents/{document_id}/status").json()["status"]
+        assert status_value == "ready_for_ai"
+
+        with SessionLocal() as session:
+            run_count = session.scalar(
+                select(func.count()).select_from(ExtractionRunModel).where(
+                    ExtractionRunModel.document_id == parsed_id
+                )
+            )
+            page_count = session.scalar(
+                select(func.count()).select_from(DocumentPageModel).where(
+                    DocumentPageModel.document_id == parsed_id
+                )
+            )
+        assert run_count == 1
+        assert page_count == 2
     finally:
         app.dependency_overrides.clear()
 
