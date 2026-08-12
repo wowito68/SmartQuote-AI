@@ -1,0 +1,107 @@
+name: Iteration 16 document hardening
+
+on:
+  push:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  document-subsystem:
+    name: Document subsystem quality gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: smartquote
+          POSTGRES_PASSWORD: smartquote
+          POSTGRES_DB: smartquote
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U smartquote -d smartquote"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      SMARTQUOTE_DATABASE_URL: postgresql+psycopg://smartquote:smartquote@localhost:5432/smartquote
+      SMARTQUOTE_STORAGE_ROOT: /tmp/smartquote-iteration16-storage
+      SMARTQUOTE_CELERY_BROKER_URL: redis://localhost:6379/0
+      SMARTQUOTE_CELERY_RESULT_BACKEND: redis://localhost:6379/1
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+          enable-cache: true
+      - run: uv sync --frozen
+      - name: Ruff lint
+        run: uv run ruff check . --output-format=github
+      - name: Ruff format check for iteration files
+        run: |
+          uv run ruff format --check \
+            alembic/versions/c8f3a05d6e94_document_subsystem_hardening.py \
+            app/api/document_processing_schemas.py \
+            app/application/dtos/document_processing.py \
+            app/application/ports/file_storage.py \
+            app/application/use_cases/document_processing.py \
+            app/application/use_cases/documents.py \
+            app/domain/documents/processing.py \
+            app/infrastructure/db/mappers/document_processing_mapper.py \
+            app/infrastructure/db/models/document_processing.py \
+            app/infrastructure/db/repositories/document_repository.py \
+            app/infrastructure/storage/local_file_storage.py \
+            tests/integration/test_document_processing_pipeline.py \
+            tests/integration/test_document_repository.py \
+            tests/unit/application/test_document_use_cases.py \
+            tests/unit/infrastructure/test_local_file_storage.py
+      - name: Migration upgrade
+        run: uv run alembic upgrade head
+      - name: Iteration 16 migration rollback and reapply
+        run: |
+          uv run alembic downgrade b7e2f94c5d83
+          uv run alembic upgrade head
+          uv run alembic current
+      - name: Document subsystem tests
+        run: >-
+          uv run pytest -q
+          tests/unit/infrastructure/test_local_file_storage.py
+          tests/unit/application/test_document_validation.py
+          tests/unit/application/test_document_quality_evaluator.py
+          tests/unit/application/test_document_use_cases.py
+          tests/integration/test_document_repository.py
+          tests/integration/test_document_endpoints.py
+          tests/integration/test_document_processing_pipeline.py
+
+  docker-compose-services:
+    name: Docker Compose PostgreSQL and Redis
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate Compose configuration
+        run: docker compose config --quiet
+      - name: Start PostgreSQL and Redis
+        run: docker compose up -d --wait postgres redis
+      - name: Verify PostgreSQL
+        run: docker compose exec -T postgres pg_isready -U smartquote -d smartquote
+      - name: Verify Redis
+        run: test "$(docker compose exec -T redis redis-cli ping | tr -d '\r')" = "PONG"
+      - name: Stop Compose services
+        if: always()
+        run: docker compose down -v --remove-orphans

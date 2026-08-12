@@ -62,6 +62,7 @@ class ExtractionRunResponseSchema(BaseModel):
     id: UUID
     document_id: UUID
     processing_key: str = Field(min_length=64, max_length=64)
+    extraction_type: str = Field(min_length=1, max_length=30)
     extractor_name: str
     extractor_version: str
     configuration: dict[str, Any]

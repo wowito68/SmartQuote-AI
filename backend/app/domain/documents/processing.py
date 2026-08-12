@@ -60,6 +60,7 @@ class ExtractionRun:
     extractor_name: str
     extractor_version: str
     configuration: dict[str, Any]
+    extraction_type: str = "text"
     status: ExtractionRunStatus = ExtractionRunStatus.RUNNING
     id: UUID = field(default_factory=uuid4)
     started_at: datetime = field(default_factory=_now)
@@ -75,6 +76,9 @@ class ExtractionRun:
     def __post_init__(self) -> None:
         if len(self.processing_key) != 64:
             raise ValidationError("Extraction processing key must be a SHA-256 digest.")
+        self.extraction_type = self.extraction_type.strip().lower()
+        if not self.extraction_type:
+            raise ValidationError("Extraction type is required.")
         if not self.extractor_name.strip() or not self.extractor_version.strip():
             raise ValidationError("Extractor name and version are required.")
 

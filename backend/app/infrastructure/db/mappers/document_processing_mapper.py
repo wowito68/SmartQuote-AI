@@ -16,6 +16,7 @@ def run_to_model(run: ExtractionRun) -> ExtractionRunModel:
         id=run.id,
         document_id=run.document_id,
         processing_key=run.processing_key,
+        extraction_type=run.extraction_type,
         extractor_name=run.extractor_name,
         extractor_version=run.extractor_version,
         configuration=run.configuration,
@@ -37,6 +38,7 @@ def run_to_domain(model: ExtractionRunModel) -> ExtractionRun:
         id=model.id,
         document_id=model.document_id,
         processing_key=model.processing_key,
+        extraction_type=model.extraction_type,
         extractor_name=model.extractor_name,
         extractor_version=model.extractor_version,
         configuration=model.configuration,
@@ -54,6 +56,7 @@ def run_to_domain(model: ExtractionRunModel) -> ExtractionRun:
 
 
 def update_run_model(model: ExtractionRunModel, run: ExtractionRun) -> None:
+    model.extraction_type = run.extraction_type
     model.extractor_name = run.extractor_name
     model.extractor_version = run.extractor_version
     model.configuration = run.configuration

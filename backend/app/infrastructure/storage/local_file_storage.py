@@ -54,6 +54,13 @@ class LocalFileStorage(FileStorage):
         except OSError as exc:
             raise DocumentStorageFailure("The stored document is unavailable.") from exc
 
+    def exists(self, storage_key: str) -> bool:
+        target = self._path_for_key(storage_key)
+        try:
+            return target.is_file()
+        except OSError as exc:
+            raise DocumentStorageFailure("Unable to inspect the stored document.") from exc
+
     def delete(self, storage_key: str) -> None:
         target = self._path_for_key(storage_key)
         try:

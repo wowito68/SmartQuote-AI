@@ -83,6 +83,7 @@ class ExtractionRunResponse:
     id: UUID
     document_id: UUID
     processing_key: str
+    extraction_type: str
     extractor_name: str
     extractor_version: str
     configuration: dict[str, Any]

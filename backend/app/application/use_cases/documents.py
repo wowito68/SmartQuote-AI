@@ -87,13 +87,12 @@ class UploadTenderDocument:
                         )
                     )
                     uow.commit()
-                    raise DuplicateDocument(
-                        "The same document already exists within this tender."
-                    )
+                    raise DuplicateDocument("The same document already exists within this tender.")
                 seen_hashes.add(file.file_hash.value)
 
             created_documents: list[TenderDocument] = []
             created_responses: list[TenderDocumentResponse] = []
+            duplicate_file = None
             try:
                 for file in validated_files:
                     document_id = uuid4()
@@ -113,7 +112,11 @@ class UploadTenderDocument:
                         file_hash=file.file_hash,
                         uploaded_by_user_id=request.uploaded_by_user_id,
                     )
-                    created = uow.documents.create(document)
+                    try:
+                        created = uow.documents.create(document)
+                    except DuplicateDocument:
+                        duplicate_file = file
+                        raise
                     uow.audit_events.append(
                         DocumentUploaded(
                             document_id=created.id,
@@ -135,6 +138,19 @@ class UploadTenderDocument:
                     tender.change_status(TenderStatus.DOCUMENTS_PENDING)
                     uow.tenders.update(tender)
                 uow.commit()
+            except DuplicateDocument:
+                uow.rollback()
+                for storage_key in stored_keys:
+                    with suppress(Exception):
+                        self._file_storage.delete(storage_key)
+                if duplicate_file is not None:
+                    self._audit_concurrent_duplicate(
+                        tender_id,
+                        request.uploaded_by_user_id,
+                        duplicate_file.file_hash.value,
+                        duplicate_file.original_file_name,
+                    )
+                raise
             except Exception:
                 uow.rollback()
                 for storage_key in stored_keys:
@@ -154,6 +170,24 @@ class UploadTenderDocument:
 
         items = tuple(created_responses)
         return TenderDocumentListResponse(items=items, total=len(items))
+
+    def _audit_concurrent_duplicate(
+        self,
+        tender_id: UUID,
+        uploaded_by_user_id: UUID,
+        file_hash: str,
+        original_file_name: str,
+    ) -> None:
+        with self._uow_factory() as audit_uow:
+            audit_uow.audit_events.append(
+                DuplicateDocumentDetected(
+                    tender_id=tender_id,
+                    uploaded_by_user_id=uploaded_by_user_id,
+                    file_hash=file_hash,
+                    original_file_name=original_file_name,
+                )
+            )
+            audit_uow.commit()
 
 
 class GetTenderDocument:

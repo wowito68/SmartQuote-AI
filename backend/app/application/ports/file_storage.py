@@ -13,5 +13,10 @@ class FileStorage(ABC):
         raise NotImplementedError
 
     @abstractmethod
+    def exists(self, storage_key: str) -> bool:
+        """Return whether the opaque storage key resolves to an existing file."""
+        raise NotImplementedError
+
+    @abstractmethod
     def delete(self, storage_key: str) -> None:
         raise NotImplementedError

@@ -51,10 +51,13 @@ class FakeDocumentRepository:
     def __init__(self, storage: dict[UUID, TenderDocument]) -> None:
         self.storage = storage
         self.fail_after: int | None = None
+        self.duplicate_on_create = False
         self.created_count = 0
 
     def create(self, document: TenderDocument) -> TenderDocument:
         self.created_count += 1
+        if self.duplicate_on_create:
+            raise DuplicateDocument("The same document already exists within this tender.")
         if self.fail_after == self.created_count:
             raise RuntimeError("database failure")
         self.storage[document.id] = deepcopy(document)
@@ -114,6 +117,7 @@ class FakeUnitOfWork(UnitOfWork):
         self.tenders = FakeTenderRepository(context["tenders"])
         self.documents = FakeDocumentRepository(context["documents"])
         self.documents.fail_after = context.get("fail_after")
+        self.documents.duplicate_on_create = bool(context.get("duplicate_on_create", False))
         self.audit_events = FakeAuditRepository(context["events"])
         self.users = FakeUserLookup(context["users"])
         self.committed = False
@@ -150,6 +154,9 @@ class FakeFileStorage:
 
     def read(self, storage_key: str) -> bytes:
         return self.files[storage_key]
+
+    def exists(self, storage_key: str) -> bool:
+        return storage_key in self.files
 
     def delete(self, storage_key: str) -> None:
         self.deleted.append(storage_key)
@@ -235,6 +242,28 @@ def test_duplicate_detection_is_audited_for_existing_and_request_duplicates(cont
             request(user_id, ("a.pdf", PDF_B), ("copy.pdf", PDF_B)),
         )
     assert isinstance(state["events"][-1], DuplicateDocumentDetected)
+
+
+def test_concurrent_duplicate_is_compensated_and_audited(context) -> None:
+    state, user_id, tender, factory = context
+    state["duplicate_on_create"] = True
+    storage = FakeFileStorage()
+
+    with pytest.raises(DuplicateDocument):
+        UploadTenderDocument(
+            factory,
+            storage,
+            maximum_size_bytes=1024,
+            maximum_files_per_upload=5,
+        ).execute(tender.id, request(user_id, ("race.pdf", PDF_A)))
+
+    assert storage.files == {}
+    assert len(storage.deleted) == 1
+    duplicate_events = [
+        event for event in state["events"] if isinstance(event, DuplicateDocumentDetected)
+    ]
+    assert len(duplicate_events) == 1
+    assert duplicate_events[0].original_file_name == "race.pdf"
 
 
 def test_upload_compensates_file_storage_when_database_fails(context) -> None:
