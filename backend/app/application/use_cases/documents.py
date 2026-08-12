@@ -87,9 +87,7 @@ class UploadTenderDocument:
                         )
                     )
                     uow.commit()
-                    raise DuplicateDocument(
-                        "The same document already exists within this tender."
-                    )
+                    raise DuplicateDocument("The same document already exists within this tender.")
                 seen_hashes.add(file.file_hash.value)
 
             created_documents: list[TenderDocument] = []
