@@ -1,9 +1,11 @@
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
+import pytest
 from sqlalchemy.orm import Session
 
 from app.domain.documents.entities import TenderDocument
+from app.domain.documents.exceptions import DuplicateDocument
 from app.domain.documents.value_objects import DocumentStatus, FileHash
 from app.domain.tenders.entities import Tender
 from app.infrastructure.db.models.user import UserModel
@@ -62,3 +64,45 @@ def test_document_repository_create_find_list_update_and_soft_delete(db_session:
     assert repository.get_by_id(created.id) is None
     assert repository.get_by_id(created.id, include_deleted=True) is not None
     assert repository.list_by_tender(tender.id) == []
+
+
+def test_document_repository_translates_unique_hash_constraint(db_session: Session) -> None:
+    user_id = persist_user(db_session)
+    tender = SqlAlchemyTenderRepository(db_session).create(
+        Tender(title="Concurrent duplicate tender", created_by_user_id=user_id)
+    )
+    repository = SqlAlchemyTenderDocumentRepository(db_session)
+    shared_hash = FileHash("a" * 64)
+
+    first_id = uuid4()
+    repository.create(
+        TenderDocument(
+            id=first_id,
+            tender_id=tender.id,
+            original_file_name="first.pdf",
+            storage_key=f"tenders/{tender.id}/{first_id}.pdf",
+            mime_type="application/pdf",
+            file_size=128,
+            file_hash=shared_hash,
+            uploaded_by_user_id=user_id,
+        )
+    )
+    db_session.commit()
+
+    second_id = uuid4()
+    with pytest.raises(DuplicateDocument, match="same document"):
+        repository.create(
+            TenderDocument(
+                id=second_id,
+                tender_id=tender.id,
+                original_file_name="second.pdf",
+                storage_key=f"tenders/{tender.id}/{second_id}.pdf",
+                mime_type="application/pdf",
+                file_size=128,
+                file_hash=shared_hash,
+                uploaded_by_user_id=user_id,
+            )
+        )
+    db_session.rollback()
+
+    assert repository.find_by_hash(tender.id, shared_hash).id == first_id
