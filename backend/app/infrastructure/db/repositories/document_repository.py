@@ -27,10 +27,7 @@ def _is_duplicate_document_violation(error: IntegrityError) -> bool:
     if constraint_name == _DUPLICATE_DOCUMENT_CONSTRAINT:
         return True
     message = str(error.orig)
-    return (
-        _DUPLICATE_DOCUMENT_CONSTRAINT in message
-        or _SQLITE_DUPLICATE_SIGNATURE in message
-    )
+    return _DUPLICATE_DOCUMENT_CONSTRAINT in message or _SQLITE_DUPLICATE_SIGNATURE in message
 
 
 class SqlAlchemyTenderDocumentRepository(TenderDocumentRepository):
