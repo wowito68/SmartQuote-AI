@@ -87,3 +87,21 @@ jobs:
           tests/integration/test_document_repository.py
           tests/integration/test_document_endpoints.py
           tests/integration/test_document_processing_pipeline.py
+
+  docker-compose-services:
+    name: Docker Compose PostgreSQL and Redis
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate Compose configuration
+        run: docker compose config --quiet
+      - name: Start PostgreSQL and Redis
+        run: docker compose up -d --wait postgres redis
+      - name: Verify PostgreSQL
+        run: docker compose exec -T postgres pg_isready -U smartquote -d smartquote
+      - name: Verify Redis
+        run: test "$(docker compose exec -T redis redis-cli ping | tr -d '\r')" = "PONG"
+      - name: Stop Compose services
+        if: always()
+        run: docker compose down -v --remove-orphans
