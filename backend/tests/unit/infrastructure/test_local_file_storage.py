@@ -17,9 +17,11 @@ def test_local_storage_uses_private_uuid_path_and_round_trips(tmp_path: Path) ->
     target = storage.root / key
     assert target.read_bytes() == b"%PDF-1.4\n%%EOF\n"
     assert target.stat().st_mode & 0o077 == 0
+    assert storage.exists(key) is True
     assert storage.read(key).startswith(b"%PDF-")
 
     storage.delete(key)
+    assert storage.exists(key) is False
     assert not target.exists()
 
 
@@ -27,5 +29,7 @@ def test_local_storage_rejects_path_traversal(tmp_path: Path) -> None:
     storage = LocalFileStorage(tmp_path / "private")
     with pytest.raises(DocumentStorageFailure):
         storage.read("../../secret.pdf")
+    with pytest.raises(DocumentStorageFailure):
+        storage.exists("../../secret.pdf")
     with pytest.raises(DocumentStorageFailure):
         storage.read("/tmp/secret.pdf")
