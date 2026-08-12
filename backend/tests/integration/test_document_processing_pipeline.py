@@ -97,9 +97,9 @@ def test_complete_pipeline_persists_pages_quality_and_is_idempotent() -> None:
         extract_text.run(document_id)
         with SessionLocal() as session:
             run_count = session.scalar(
-                select(func.count()).select_from(ExtractionRunModel).where(
-                    ExtractionRunModel.document_id == UUID(document_id)
-                )
+                select(func.count())
+                .select_from(ExtractionRunModel)
+                .where(ExtractionRunModel.document_id == UUID(document_id))
             )
             events = set(session.scalars(select(AuditEventModel.event_type)))
         assert run_count == 1
@@ -136,14 +136,14 @@ def test_failed_document_can_retry_pipeline_without_duplicate_evidence() -> None
 
         with SessionLocal() as session:
             run_count = session.scalar(
-                select(func.count()).select_from(ExtractionRunModel).where(
-                    ExtractionRunModel.document_id == parsed_id
-                )
+                select(func.count())
+                .select_from(ExtractionRunModel)
+                .where(ExtractionRunModel.document_id == parsed_id)
             )
             page_count = session.scalar(
-                select(func.count()).select_from(DocumentPageModel).where(
-                    DocumentPageModel.document_id == parsed_id
-                )
+                select(func.count())
+                .select_from(DocumentPageModel)
+                .where(DocumentPageModel.document_id == parsed_id)
             )
         assert run_count == 1
         assert page_count == 2
@@ -170,9 +170,7 @@ def test_real_celery_worker_processes_blank_pdf_and_marks_needs_ocr() -> None:
         deadline = time.monotonic() + 30
         status_value = "queued"
         while time.monotonic() < deadline:
-            status_value = client.get(
-                f"/api/v1/documents/{document_id}/status"
-            ).json()["status"]
+            status_value = client.get(f"/api/v1/documents/{document_id}/status").json()["status"]
             if status_value in {"needs_ocr", "ready_for_ai", "failed"}:
                 break
             time.sleep(0.25)
