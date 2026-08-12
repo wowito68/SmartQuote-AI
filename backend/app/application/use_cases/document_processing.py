@@ -185,9 +185,7 @@ class ExtractDocumentText:
             ):
                 return document.id
             processing_key = self._extractor.processing_key(document.file_hash.value)
-            completed = uow.extractions.get_completed_by_processing_key(
-                document.id, processing_key
-            )
+            completed = uow.extractions.get_completed_by_processing_key(document.id, processing_key)
             if completed is not None:
                 document.mark_text_extracted()
                 uow.documents.update(document)
