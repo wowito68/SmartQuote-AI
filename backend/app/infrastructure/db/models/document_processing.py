@@ -44,6 +44,7 @@ class ExtractionRunModel(Base):
         Uuid, ForeignKey("tender_documents.id", ondelete="CASCADE"), nullable=False
     )
     processing_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    extraction_type: Mapped[str] = mapped_column(String(30), nullable=False)
     extractor_name: Mapped[str] = mapped_column(String(100), nullable=False)
     extractor_version: Mapped[str] = mapped_column(String(100), nullable=False)
     configuration: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
