@@ -174,11 +174,15 @@ class ExtractDocumentText:
         with self._uow_factory() as uow:
             document = _required_document(uow, document_id)
             latest = uow.extractions.get_latest_run(document.id)
-            if document.status in {
-                DocumentStatus.TEXT_EXTRACTED,
-                DocumentStatus.READY_FOR_AI,
-                DocumentStatus.NEEDS_OCR,
-            } and latest is not None:
+            if (
+                document.status
+                in {
+                    DocumentStatus.TEXT_EXTRACTED,
+                    DocumentStatus.READY_FOR_AI,
+                    DocumentStatus.NEEDS_OCR,
+                }
+                and latest is not None
+            ):
                 return document.id
             processing_key = self._extractor.processing_key(document.file_hash.value)
             completed = uow.extractions.get_completed_by_processing_key(
