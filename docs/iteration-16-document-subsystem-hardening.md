@@ -135,13 +135,15 @@ La iteración agrega cobertura explícita para:
 ```text
 uv sync --frozen
 uv run ruff check . --output-format=github
-uv run ruff format --check .
+uv run ruff format --check <archivos Python tocados por Iteración 16>
 uv run alembic upgrade head
 uv run alembic downgrade b7e2f94c5d83
 uv run alembic upgrade head
 uv run alembic current
 pytest documental enfocado
 ```
+
+Se ejecutó además `ruff format --check .` sobre el backend completo durante el primer gate. Ese check detectó 23 archivos históricos fuera del alcance de esta iteración que ya requieren reformateo, principalmente en módulos de quotes/comparison y sus tests. La Iteración 16 no realiza un cambio masivo de formato sobre esos módulos porque sería ruido no necesario para completar el subsistema documental. El workflow exige en cambio que todos los archivos Python creados o modificados por esta iteración sí cumplan `ruff format --check`.
 
 El CI global de SmartQuote continúa ejecutando full pytest, cobertura, OpenAPI, Docker y el ciclo global de migraciones.
 
@@ -178,6 +180,7 @@ Las capacidades posteriores que ya existen en el repositorio se preservan sin am
 
 ## Deuda técnica restante
 
+- 23 archivos históricos del backend no cumplen todavía el formato global de Ruff; deben normalizarse en un cambio separado para evitar mezclar una limpieza transversal con este hardening documental;
 - carga/descarga streaming antes de elevar límites de tamaño;
 - antivirus real detrás de `FileThreatScanner`;
 - política de retención y purga física;
