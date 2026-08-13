@@ -127,10 +127,14 @@ def test_engine_recommends_only_complete_comparable_supplier() -> None:
     )
     assert result.status is RecommendationStatus.READY
     assert result.recommended_supplier_id == supplier_a
-    winner = next(candidate for candidate in result.candidates if candidate.supplier_id == supplier_a)
+    winner = next(
+        candidate for candidate in result.candidates if candidate.supplier_id == supplier_a
+    )
     assert winner.eligible is True
     assert winner.score == Decimal("100.00")
-    loser = next(candidate for candidate in result.candidates if candidate.supplier_id == supplier_b)
+    loser = next(
+        candidate for candidate in result.candidates if candidate.supplier_id == supplier_b
+    )
     assert loser.score is not None and loser.score < winner.score
     assert result.human_review_required is True
 
