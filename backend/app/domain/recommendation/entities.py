@@ -86,10 +86,14 @@ class Recommendation:
         elif self.recommended_supplier_id is not None or self.recommended_supplier_name is not None:
             raise ValidationError("Withheld recommendations cannot identify a supplier.")
         object.__setattr__(self, "policy_version", self.policy_version.strip()[:50])
-        object.__setattr__(self, "recommended_supplier_name", (
-            " ".join(self.recommended_supplier_name.split())[:500]
-            if self.recommended_supplier_name
-            else None
-        ))
+        object.__setattr__(
+            self,
+            "recommended_supplier_name",
+            (
+                " ".join(self.recommended_supplier_name.split())[:500]
+                if self.recommended_supplier_name
+                else None
+            ),
+        )
         object.__setattr__(self, "explanation", explanation[:4000])
         object.__setattr__(self, "warnings", tuple(sorted(set(self.warnings))))
