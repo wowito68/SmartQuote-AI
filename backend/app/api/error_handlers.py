@@ -42,6 +42,7 @@ from app.domain.quotes.exceptions import (
     QuoteProviderError,
     QuoteStorageError,
 )
+from app.domain.recommendation.exceptions import RecommendationNotFound, RecommendationNotReady
 from app.domain.rfqs.exceptions import (
     AttachmentValidationError,
     DuplicateRfqSend,
@@ -126,10 +127,12 @@ def register_exception_handlers(app: FastAPI) -> None:
         (QuoteItemNotFound, status.HTTP_404_NOT_FOUND, "quote_item_not_found"),
         (ComparisonNotFound, status.HTTP_404_NOT_FOUND, "comparison_not_found"),
         (comparison_exceptions.ComparisonNotFound, status.HTTP_404_NOT_FOUND, "comparison_not_found"),
+        (RecommendationNotFound, status.HTTP_404_NOT_FOUND, "recommendation_not_found"),
         (DuplicateQuote, status.HTTP_409_CONFLICT, "duplicate_quote"),
         (InvalidQuoteState, status.HTTP_409_CONFLICT, "invalid_quote_state"),
         (ComparisonNotReady, status.HTTP_409_CONFLICT, "comparison_not_ready"),
         (comparison_exceptions.ComparisonNotReady, status.HTTP_409_CONFLICT, "comparison_not_ready"),
+        (RecommendationNotReady, status.HTTP_409_CONFLICT, "recommendation_not_ready"),
         (QuoteStorageError, status.HTTP_503_SERVICE_UNAVAILABLE, "quote_storage_unavailable"),
         (QuoteProviderError, status.HTTP_503_SERVICE_UNAVAILABLE, "quote_provider_unavailable"),
         (QuoteExtractionFailure, status.HTTP_503_SERVICE_UNAVAILABLE, "quote_extraction_failed"),
