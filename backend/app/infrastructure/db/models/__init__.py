@@ -28,6 +28,7 @@ from app.infrastructure.db.models.quote import (
     QuoteTaskRecordModel,
 )
 from app.infrastructure.db.models.quote_analysis import QuoteExtractionArtifactModel
+from app.infrastructure.db.models.recommendation import RecommendationModel
 from app.infrastructure.db.models.rfq import (
     EmailAttachmentModel,
     EmailMessageModel,
@@ -75,6 +76,7 @@ __all__ = [
     "QuoteItemRevisionModel",
     "QuoteModel",
     "QuoteTaskRecordModel",
+    "RecommendationModel",
     "RfqRequestModel",
     "RfqTaskRecordModel",
     "RfqVersionModel",
