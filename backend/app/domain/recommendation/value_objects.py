@@ -31,8 +31,7 @@ class RecommendationWeights:
 
     def canonical(self) -> str:
         return "|".join(
-            format(value.normalize(), "f")
-            for value in (self.technical, self.price, self.delivery)
+            format(value.normalize(), "f") for value in (self.technical, self.price, self.delivery)
         )
 
     def as_dict(self) -> dict[str, str]:
