@@ -207,9 +207,7 @@ class RecommendationEngine:
         price = self._average_ratio(price_scores) if weights.price > 0 else Decimal("0")
         delivery = self._average_ratio(delivery_scores) if weights.delivery > 0 else Decimal("0")
         score = (
-            technical * weights.technical
-            + price * weights.price
-            + delivery * weights.delivery
+            technical * weights.technical + price * weights.price + delivery * weights.delivery
         ) * _SCORE_SCALE
         return RecommendationCandidate(
             supplier_id=supplier_id,
