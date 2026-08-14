@@ -20,6 +20,9 @@ from app.infrastructure.db.repositories.quote_analysis_artifact_repository impor
     SqlAlchemyQuoteAnalysisArtifactRepository,
 )
 from app.infrastructure.db.repositories.quote_repository import SqlAlchemyQuoteRepository
+from app.infrastructure.db.repositories.recommendation_repository import (
+    SqlAlchemyRecommendationRepository,
+)
 from app.infrastructure.db.repositories.rfq_repository import SqlAlchemyRfqRepository
 from app.infrastructure.db.repositories.supplier_repository import (
     SqlAlchemySupplierRepository,
@@ -46,6 +49,7 @@ class SqlAlchemyUnitOfWork(UnitOfWork):
         self.quotes = SqlAlchemyQuoteRepository(self._session)
         self.quote_artifacts = SqlAlchemyQuoteAnalysisArtifactRepository(self._session)
         self.comparisons = SqlAlchemyComparisonRepository(self._session)
+        self.recommendations = SqlAlchemyRecommendationRepository(self._session)
         self.users = SqlAlchemyUserLookup(self._session)
         return self
 

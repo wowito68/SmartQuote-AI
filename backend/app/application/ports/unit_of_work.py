@@ -11,6 +11,7 @@ from app.application.ports.quote_analysis_artifact_repository import (
     QuoteAnalysisArtifactRepository,
 )
 from app.application.ports.quote_repository import QuoteRepository
+from app.application.ports.recommendation_repository import RecommendationRepository
 from app.application.ports.rfq_repository import RfqRepository
 from app.application.ports.supplier_repository import SupplierRepository
 from app.application.ports.tender_repository import TenderRepository
@@ -28,6 +29,7 @@ class UnitOfWork(ABC):
     quotes: QuoteRepository
     quote_artifacts: QuoteAnalysisArtifactRepository
     comparisons: ComparisonRepository
+    recommendations: RecommendationRepository
     users: UserLookup
 
     @abstractmethod

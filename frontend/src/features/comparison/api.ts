@@ -1,6 +1,6 @@
 import { ApiError } from "../../lib/api";
 import type { UUID } from "../../lib/types";
-import type { Comparison } from "./types";
+import type { Comparison, Recommendation } from "./types";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "";
 
@@ -32,5 +32,26 @@ export const comparisonApi = {
     }),
 
   get: (comparisonId: UUID) =>
-    request<Comparison>(`/api/v1/comparisons/${comparisonId}`)
+    request<Comparison>(`/api/v1/comparisons/${comparisonId}`),
+
+  latestRecommendation: (comparisonId: UUID) =>
+    request<Recommendation>(`/api/v1/comparisons/${comparisonId}/recommendations`),
+
+  generateRecommendation: (
+    comparisonId: UUID,
+    userId: UUID,
+    weights: { technical: number; price: number; delivery: number }
+  ) =>
+    request<Recommendation>(`/api/v1/comparisons/${comparisonId}/recommendations`, {
+      method: "POST",
+      body: JSON.stringify({
+        generated_by_user_id: userId,
+        technical_weight: weights.technical,
+        price_weight: weights.price,
+        delivery_weight: weights.delivery
+      })
+    }),
+
+  getRecommendation: (recommendationId: UUID) =>
+    request<Recommendation>(`/api/v1/recommendations/${recommendationId}`)
 };

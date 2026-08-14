@@ -76,6 +76,7 @@ def db_session(db_engine: Engine) -> Generator[Session]:
 def clean_database_after_test(db_engine: Engine) -> Generator[None]:
     yield
     with db_engine.begin() as connection:
+        connection.execute(text("DELETE FROM recommendations"))
         connection.execute(text("DELETE FROM comparison_offers"))
         connection.execute(text("DELETE FROM comparison_items"))
         connection.execute(text("DELETE FROM comparisons"))

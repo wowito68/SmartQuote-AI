@@ -1,0 +1,120 @@
+name: Iteration 17 explainable recommendation
+
+on:
+  push:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  recommendation-backend:
+    name: Recommendation backend quality gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: smartquote
+          POSTGRES_PASSWORD: smartquote
+          POSTGRES_DB: smartquote
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U smartquote -d smartquote"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      SMARTQUOTE_DATABASE_URL: postgresql+psycopg://smartquote:smartquote@localhost:5432/smartquote
+      SMARTQUOTE_STORAGE_ROOT: /tmp/smartquote-iteration17-storage
+      SMARTQUOTE_CELERY_BROKER_URL: redis://localhost:6379/0
+      SMARTQUOTE_CELERY_RESULT_BACKEND: redis://localhost:6379/1
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+          enable-cache: true
+      - run: uv sync --frozen
+      - name: Ruff lint
+        run: uv run ruff check . --output-format=github
+      - name: Ruff format check for Iteration 17 Python
+        run: |
+          # error_handlers.py retains repository-wide formatter debt documented since Iteration 16.
+          # It remains covered by the global Ruff lint gate; avoid mass-formatting unrelated handlers here.
+          uv run ruff format --check \
+            alembic/versions/d9a7c41e6f20_recommendation_scenarios.py \
+            app/api/recommendation_schemas.py \
+            app/api/routes/recommendation.py \
+            app/application/dtos/recommendation.py \
+            app/application/ports/recommendation_repository.py \
+            app/application/ports/unit_of_work.py \
+            app/application/services/recommendation_engine.py \
+            app/application/use_cases/recommendation.py \
+            app/config/settings.py \
+            app/domain/recommendation \
+            app/infrastructure/db/models/__init__.py \
+            app/infrastructure/db/models/recommendation.py \
+            app/infrastructure/db/repositories/recommendation_repository.py \
+            app/infrastructure/db/unit_of_work.py \
+            app/main.py \
+            tests/integration/test_recommendation_iteration17.py \
+            tests/unit/application/test_recommendation_engine.py \
+            tests/unit/domain/test_recommendation_domain.py
+      - name: Migration upgrade
+        run: uv run alembic upgrade head
+      - name: Iteration 17 migration rollback and reapply
+        run: |
+          uv run alembic downgrade c8f3a05d6e94
+          uv run alembic upgrade head
+          uv run alembic current
+      - name: Recommendation tests
+        run: >-
+          uv run pytest -q
+          tests/unit/domain/test_recommendation_domain.py
+          tests/unit/application/test_recommendation_engine.py
+          tests/integration/test_recommendation_iteration17.py
+      - name: Recommendation OpenAPI contract
+        run: |
+          uv run python - <<'PY'
+          from app.main import app
+          paths = app.openapi()["paths"]
+          expected = {
+              "/api/v1/comparisons/{comparison_id}/recommendations": {"get", "post"},
+              "/api/v1/recommendations/{recommendation_id}": {"get"},
+          }
+          for path, methods in expected.items():
+              assert path in paths, path
+              assert methods <= set(paths[path]), (path, paths[path])
+          PY
+
+  recommendation-frontend:
+    name: Recommendation frontend build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run build

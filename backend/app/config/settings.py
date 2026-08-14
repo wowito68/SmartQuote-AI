@@ -11,7 +11,7 @@ EmailMode = Literal["simulation", "smtp"]
 
 class Settings(BaseSettings):
     project_name: str = Field(default="SmartQuote AI")
-    version: str = Field(default="0.10.0")
+    version: str = Field(default="0.11.0")
     environment: Environment = Field(default="local")
     api_v1_prefix: str = Field(default="/api/v1")
     database_url: SecretStr
@@ -52,6 +52,8 @@ class Settings(BaseSettings):
     comparison_scoring_config_version: str = Field(default="mvp-1")
     # Iteration 14 deterministic descriptive comparison contract.
     comparison_rules_version: str = Field(default="1.0.0")
+    # Iteration 17 deterministic, human-gated recommendation policy.
+    recommendation_policy_version: str = Field(default="1.0.0")
 
     supplier_directory_path: Path = Field(
         default=Path("app/supplier_sources/default_directory.json")

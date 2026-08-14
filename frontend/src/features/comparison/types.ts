@@ -81,3 +81,41 @@ export type Comparison = {
   created_at: string;
   completed_at: string | null;
 };
+
+export type RecommendationStatus = "ready" | "withheld";
+
+export type RecommendationWeights = {
+  technical: string | number;
+  price: string | number;
+  delivery: string | number;
+};
+
+export type RecommendationCandidate = {
+  supplier_id: UUID;
+  supplier_name: string;
+  eligible: boolean;
+  product_count: number;
+  technical_score: string | number | null;
+  price_score: string | number | null;
+  delivery_score: string | number | null;
+  score: string | number | null;
+  exclusion_reasons: string[];
+};
+
+export type Recommendation = {
+  id: UUID;
+  comparison_id: UUID;
+  tender_id: UUID;
+  recommendation_key: string;
+  policy_version: string;
+  weights: RecommendationWeights;
+  generated_by_user_id: UUID;
+  status: RecommendationStatus;
+  candidates: RecommendationCandidate[];
+  recommended_supplier_id: UUID | null;
+  recommended_supplier_name: string | null;
+  explanation: string;
+  warnings: string[];
+  human_review_required: boolean;
+  created_at: string;
+};

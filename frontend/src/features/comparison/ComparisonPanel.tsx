@@ -15,6 +15,7 @@ import { ApiError } from "../../lib/api";
 import { formatDate } from "../../lib/format";
 import type { UUID } from "../../lib/types";
 import { comparisonApi } from "./api";
+import { RecommendationPanel } from "./RecommendationPanel";
 import type {
   Comparison,
   ComparisonCompliance,
@@ -142,6 +143,7 @@ export function ComparisonPanel({
           ) : null}
           <ComparisonWarnings warnings={comparison.warnings} />
           <ComparisonMatrix comparison={comparison} suppliers={suppliers} />
+          <RecommendationPanel comparison={comparison} userId={userId} onError={onError} />
         </div>
       )}
     </Section>
@@ -169,7 +171,8 @@ function ComparisonSummary({ comparison }: { comparison: Comparison }) {
       <Card className="sm:col-span-2 xl:col-span-5" padding="sm">
         <div className="grid gap-1 text-xs text-text-secondary sm:grid-cols-2">
           <p>
-            Generado: <span className="font-medium text-text-primary">{formatDate(comparison.created_at)}</span>
+            Generado:{" "}
+            <span className="font-medium text-text-primary">{formatDate(comparison.created_at)}</span>
           </p>
           <p className="truncate font-mono" title={comparison.comparison_key}>
             Huella: {comparison.comparison_key}
